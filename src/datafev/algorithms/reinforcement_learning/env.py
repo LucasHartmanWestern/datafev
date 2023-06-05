@@ -21,7 +21,6 @@ class env(ABC):
             - done: A boolean indicating whether the episode has ended.
         """
 
-        self.reward_function = reward_function
         self.actions = actions
         self.states = states
         self.current_state = self.states[0]

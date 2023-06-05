@@ -5,10 +5,10 @@ import tensorflow as tf
 import utils
 import env
 from rl_functions import compute_loss, agent_learn
-from tensorflow.keras import Sequential
-from tensorflow.keras.layers import Dense, Input
-from tensorflow.keras.losses import MSE
-from tensorflow.keras.optimizers import Adam
+from keras import Sequential
+from keras.layers import Dense, Input
+from keras.losses import MSE
+from keras.optimizers import Adam
 
 def get_Q_function(
     environment,
