@@ -3,6 +3,7 @@ from collections import deque, namedtuple
 import numpy as np
 import tensorflow as tf
 import utils
+import env
 from rl_functions import compute_loss, agent_learn
 from tensorflow.keras import Sequential
 from tensorflow.keras.layers import Dense, Input
@@ -10,21 +11,37 @@ from tensorflow.keras.losses import MSE
 from tensorflow.keras.optimizers import Adam
 
 def get_Q_function(
+    environment,
     MEMORY_SIZE = 100_000,          # size of memory buffer
     GAMMA = 0.995,                  # discount factor
     ALPHA = 1e-3,                   # learning rate
     NUM_STEPS_FOR_UPDATE = 4,       # perform a learning update every C time steps
     num_iters = 2000,               # amount of times to iterate during training process
-    max_num_timesteps = 1000,       # amount of timesteps to take during training process
+    max_num_timesteps = 1000,       # amount of steps to take during a training iteration
     num_p_av = 100,                 # number of total points to use for averaging
     epsilon = 1.0,                  # initial ε value for ε-greedy policy
-    num_actions = 4,                # amount of possible actions to take
-    state_size = 16,                # amount of state sets used as inputs
     hidden_layers = [64, 64]        # hidden layer architecture
 ):
-    tf.random.set_seed(utils.SEED) # Set the random seed for TensorFlow
+    if not isinstance(environment, env):
+        raise TypeError('environment must be an instance of env or its subclass')
+
+    state_size = len(environment.states)
+    num_actions = len(environment.actions)
+
+    environment.reset()
+
+    tf.random.set_seed(1337) # Set the random seed for TensorFlow
     q_network, target_q_network, optimizer = buildNetworks(state_size, num_actions, hidden_layers, ALPHA)
-    trainNetwork(MEMORY_SIZE, q_network, target_q_network, optimizer, num_iters, max_num_timesteps, NUM_STEPS_FOR_UPDATE, GAMMA, num_p_av)
+    trainNetwork(environment,
+                 MEMORY_SIZE,
+                 q_network,
+                 target_q_network,
+                 optimizer,
+                 num_iters,
+                 max_num_timesteps,
+                 NUM_STEPS_FOR_UPDATE,
+                 GAMMA,
+                 num_p_av)
 
 #### Create network architectures ####
 def buildNetworks(
@@ -53,6 +70,7 @@ def buildNetworks(
 
 #### Train the network ####
 def trainNetwork(
+    environment,
     MEMORY_SIZE,
     q_network,
     target_q_network,
@@ -77,7 +95,7 @@ def trainNetwork(
 
     for i in range(num_iters):
         # Reset the environment to the initial state and get the initial state
-        state = 0 # TODO - Assign reset state
+        state = environment.reset()
         total_points = 0
         for t in range(max_num_timesteps):
             # From the current state S choose an action A using an ε-greedy policy
@@ -85,7 +103,7 @@ def trainNetwork(
             q_values = q_network(state_qn)
             action = utils.get_action(q_values, epsilon)
             # Take action A and receive reward R and the next state S'
-            next_state, reward, done, _ = # TODO - get values based on taking a step in the environment
+            next_state, reward, done = environment.step(action)
             # Store experience tuple (S,A,R,S') in the memory buffer.
             # We store the done variable as well for convenience.
             memory_buffer.append(experience(state, action, reward, next_state, done))
