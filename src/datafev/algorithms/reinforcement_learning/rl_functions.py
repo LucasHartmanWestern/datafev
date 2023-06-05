@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.losses import MSE
+from keras.losses import MSE
+import utils
 
 def compute_loss(experiences, gamma, q_network, target_q_network):
     states, actions, rewards, next_states, done_vals = experiences  # Unpack the mini-batch of experience tuples
