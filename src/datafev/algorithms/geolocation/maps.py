@@ -2,13 +2,8 @@ import math
 import requests
 from geopy.distance import geodesic
 import googlemaps
-from geopy.geocoders import Nominatim
 
-def travel_sim_full(
-        origin,
-        destination,
-        travel_time=1800,
-        api_key='AIzaSyBMkx9V1r0tE6yLdkaaqJu3Ub4oh4_su5A'):
+def travel_sim_full(origin, destination, travel_time, api_key):
 
     origin = address_to_coordinates(origin)
     destination = address_to_coordinates(destination)
@@ -52,7 +47,7 @@ def travel_sim_full(
 
     print(f"\nArrived in {i} intervals travelling {travel_time / 60} minutes each interval!")
 
-def get_distance_and_time(origin, destination, api_key = "AIzaSyBMkx9V1r0tE6yLdkaaqJu3Ub4oh4_su5A"):
+def get_distance_and_time(origin, destination, api_key):
     """Gets the distance and travel-time between two coordinates using the google maps API"""
 
     url = "https://maps.googleapis.com/maps/api/distancematrix/json?units=metric"
@@ -155,7 +150,7 @@ def get_initial_compass_bearing(pointA, pointB):
 
     return compass_bearing
 
-def address_to_coordinates(address, api_key = "AIzaSyBMkx9V1r0tE6yLdkaaqJu3Ub4oh4_su5A"):
+def address_to_coordinates(address, api_key):
     base_url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {"address": address, "key": api_key}
     response = requests.get(base_url, params=params)
