@@ -1,25 +1,64 @@
+import math
 import requests
-import json
-from geopy import Point
 from geopy.distance import geodesic
-from math import radians
-import numpy as np
+import googlemaps
+from geopy.geocoders import Nominatim
+
+def travel_sim_full(
+        origin,
+        destination,
+        travel_time=1800,
+        api_key='AIzaSyBMkx9V1r0tE6yLdkaaqJu3Ub4oh4_su5A'):
+
+    origin = address_to_coordinates(origin)
+    destination = address_to_coordinates(destination)
+
+    distance_details = get_distance_and_time(origin, destination)
+    print(f"Starting Distance: {math.ceil(distance_details[0] / 1000)} KMs - {math.ceil(distance_details[1] / 60)} Minutes")
+
+    i = 1
+    repeat_multiplier = 1
+    prev_location_list = []
+    immediate_prev = None
+
+    while get_distance_and_time(origin, destination)[1] > travel_time * repeat_multiplier:
+
+        new_location = move_towards(origin, destination, travel_time * repeat_multiplier, api_key)
+
+        if new_location == None:
+            i += 1
+            repeat_multiplier += 1
+            continue
+
+        immediate_prev = origin
+        origin = new_location
+        if origin in prev_location_list:
+            i += 1
+            repeat_multiplier += 1
+            continue
+
+        distance_details = get_distance_and_time(origin, destination)
+        if isinstance(distance_details, str):
+            i += 1
+            repeat_multiplier += 1
+            origin = immediate_prev
+            continue
+
+        repeat_multiplier = 1
+        prev_location_list.append(origin)
+
+        print(f"Interval {i}: {math.ceil(distance_details[0] / 1000)} KMs - {math.ceil(distance_details[1] / 60)} Minutes")
+        i += 1
+
+    print(f"\nArrived in {i} intervals travelling {travel_time / 60} minutes each interval!")
 
 def get_distance_and_time(origin, destination, api_key = "AIzaSyBMkx9V1r0tE6yLdkaaqJu3Ub4oh4_su5A"):
-    """Gets the distance and travel-time between two addresses using the google maps API
-
-    Args:
-        origin: Address of origin
-        destination: Address of destination
-        api_key: API key for the Google Maps Distance Matrix API
-
-    Returns:
-        A tuple (distance, time) where:
-        - distance: The physical distance measured in meters
-        - time: The travel time measured in seconds
-    """
+    """Gets the distance and travel-time between two coordinates using the google maps API"""
 
     url = "https://maps.googleapis.com/maps/api/distancematrix/json?units=metric"
+    # Format the tuples as strings
+    origin = str(origin[0]) + "," + str(origin[1])
+    destination = str(destination[0]) + "," + str(destination[1])
 
     r = requests.get(url + "&origins=" + origin + "&destinations=" + destination + "&key=" + api_key)
     data = r.json()
@@ -40,109 +79,89 @@ def get_distance_and_time(origin, destination, api_key = "AIzaSyBMkx9V1r0tE6yLdk
 
     return distance, time
 
-def move_towards(origin, destination, distance_to_move):
-    """Moves from one point to another using long and lat coordinates
 
-    Args:
-        origin: Address of origin
-        destination: Address of destination
-        distance_to_move: Amount of kilometers to move from the origin to destination
+def move_towards(origin, destination, travel_time, api_key):
+    gmaps = googlemaps.Client(key=api_key)
 
-    Returns:
-        updated_address: Address of new position after travelling an amount of kilometers
-    """
+    directions_result = gmaps.directions(origin, destination, mode="driving", departure_time="now")
 
-    originCoords = get_lat_lng(origin)
-    destinationCoords = get_lat_lng(destination)
-
-    origin_point = Point(originCoords)
-    destination_point = Point(destinationCoords)
-
-    # get the direction from the origin to the destination
-    direction = calculate_initial_compass_bearing(originCoords, destinationCoords)
-
-    # calculate new point using the direction and the distance
-    new_point = geodesic(kilometers=distance_to_move).destination(origin_point, direction)
-
-    updated_address = get_address(new_point[0], new_point[1])
-
-    return updated_address
-
-def get_lat_lng(address, apiKey = "AIzaSyBMkx9V1r0tE6yLdkaaqJu3Ub4oh4_su5A"):
-    """Gets the latitude and longitude of an address
-
-    Args:
-        address: Address to be converted
-        api_key: API key for the Google Maps Distance Matrix API
-
-    Returns:
-        A tuple (lat, lng) where:
-        - lat: Latitude of location
-        - lng: Longitude of location
-    """
-
-    url = ('https://maps.googleapis.com/maps/api/geocode/json?address={}&key={}'
-           .format(address.replace(' ', '+'), apiKey))
-    try:
-        response = requests.get(url)
-        resp_json_payload = response.json()
-        lat = resp_json_payload['results'][0]['geometry']['location']['lat']
-        lng = resp_json_payload['results'][0]['geometry']['location']['lng']
-    except:
-        print('ERROR: {}'.format(resp_json_payload['status']))
+    if not directions_result:
         return None
-    return lat, lng
 
-def get_address(latitude, longitude, api_key = "AIzaSyBMkx9V1r0tE6yLdkaaqJu3Ub4oh4_su5A"):
-    """Gets the latitude and longitude of an address
+    shortest_route = min(directions_result, key=lambda route: route['legs'][0]['duration']['value'])
+    route = shortest_route['legs'][0]
+    total_duration = route['duration']['value']
 
-    Args:
-        latitude: Latitude to be converted
-        longitude: Longitude to be converted
-        api_key: API key for the Google Maps Distance Matrix API
+    if total_duration < travel_time:
+        return destination
 
-    Returns:
-        address: Address of location
+    current_time = 0
+    increment_time = 60  # Break down each step into 60 seconds increment
+    for step in route['steps']:
+        step_duration = step['duration']['value']
+
+        for _ in range(step_duration // increment_time):
+            current_time += increment_time
+            if current_time >= travel_time:
+                step_fraction = ((current_time - increment_time) + (step_duration % increment_time)) / step_duration
+
+                start_lat = step['start_location']['lat']
+                start_lng = step['start_location']['lng']
+                end_lat = step['end_location']['lat']
+                end_lng = step['end_location']['lng']
+
+                start_point = (start_lat, start_lng)
+                end_point = (end_lat, end_lng)
+                bearing = get_initial_compass_bearing(start_point, end_point)
+                distance = geodesic(start_point, end_point).miles
+                new_point = geodesic(miles=distance * step_fraction).destination(point=start_point, bearing=bearing)
+                new_lat, new_lng = new_point.latitude, new_point.longitude
+
+                return (new_lat, new_lng)
+
+    return None  # Unable to find a new point
+
+def get_initial_compass_bearing(pointA, pointB):
     """
-
-    url = ('https://maps.googleapis.com/maps/api/geocode/json?latlng={},{}&key={}'
-           .format(latitude, longitude, api_key))
-    try:
-        response = requests.get(url)
-        resp_json_payload = response.json()
-        address = resp_json_payload['results'][0]['formatted_address']
-    except:
-        print('ERROR: {}'.format(resp_json_payload['status']))
-        return None
-    return address
-
-def calculate_initial_compass_bearing(pointA, pointB):
-    """Moves from one point to another using long and lat coordinates
-
-    Args:
-        pointA: Latitude and longitude of a point A
-        pointB: Latitude and longitude of a point B
-
-    Returns:
-        compass_bearing: Value used for getting direction of movement
+    Calculates the bearing between two points.
+    The formula used to calculate bearing is:
+        θ = atan2(sin(Δlong).cos(lat2),
+                  cos(lat1).sin(lat2) – sin(lat1).cos(lat2).cos(Δlong))
+    :param pointA: tuple of (latitude, longitude)
+    :param pointB: tuple of (latitude, longitude)
+    :returns: initial compass bearing in degrees, as float
     """
 
     if (type(pointA) != tuple) or (type(pointB) != tuple):
         raise TypeError("Only tuples are supported as arguments")
 
-    lat1 = radians(pointA[0])
-    lat2 = radians(pointB[0])
+    lat1 = math.radians(pointA[0])
+    lat2 = math.radians(pointB[0])
 
-    diffLong = radians(pointB[1] - pointA[1])
+    diffLong = math.radians(pointB[1] - pointA[1])
 
-    x = np.sin(diffLong) * np.cos(lat2)
-    y = np.cos(lat1) * np.sin(lat2) - (np.sin(lat1) * np.cos(lat2) * np.cos(diffLong))
+    x = math.sin(diffLong) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - (math.sin(lat1)
+            * math.cos(lat2) * math.cos(diffLong))
 
-    initial_bearing = np.arctan2(x, y)
+    initial_bearing = math.atan2(x, y)
 
-    # Now we have the initial bearing but math.atan2() returns values from -π to + π so we need to normalize the result
-    # by converting it to a compass bearing as it is in the range 0° to 360°
-    initial_bearing = np.degrees(initial_bearing)
+    # Now we have the initial bearing but math.atan2() returns values from -π to + π
+    # so we need to normalize the result by converting it to a compass bearing
+    # as it is common to measure bearings in this way.
+
+    initial_bearing = math.degrees(initial_bearing)
     compass_bearing = (initial_bearing + 360) % 360
 
     return compass_bearing
+
+def address_to_coordinates(address, api_key = "AIzaSyBMkx9V1r0tE6yLdkaaqJu3Ub4oh4_su5A"):
+    base_url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {"address": address, "key": api_key}
+    response = requests.get(base_url, params=params)
+    if response.status_code == 200 and response.json()['status'] == 'OK':
+        latitude = response.json()['results'][0]['geometry']['location']['lat']
+        longitude = response.json()['results'][0]['geometry']['location']['lng']
+        return latitude, longitude
+    else:
+        return None
