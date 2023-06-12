@@ -160,3 +160,36 @@ def address_to_coordinates(address, api_key):
         return latitude, longitude
     else:
         return None
+
+def get_closest_chargers(current_lat, current_long, return_num, charger_list):
+    """Returns a list of chargering stations which are closest to the current coordinates
+
+    Args:
+        current_lat: Latitude to use as the origin
+        current_long: Longitude to use as the origin
+        return_num: Amount of charging stations to return
+        charger_list: A list of tuples (id, lat, long)
+
+    Returns:
+        A filtered list of tuples (id, lat, long)
+    """
+    # Calculate the distances and travel times between the current coordinates and all charger locations
+    distances_and_times = []
+    origin = (current_lat, current_long)
+    for charger in charger_list:
+        destination = (charger[1], charger[2])
+        distance, time = get_distance_and_time(origin, destination)
+        distances_and_times.append((charger[0], distance, time))
+
+    # Sort the distances in ascending order
+    distances_and_times.sort(key=lambda x: x[1])
+
+    # Get the closest charging stations up to the desired return_num
+    closest_chargers = []
+    for i in range(min(return_num, len(distances_and_times))):
+        charger_id = distances_and_times[i][0]
+        charger_lat = charger_list[charger_id][1]
+        charger_long = charger_list[charger_id][2]
+        closest_chargers.append((charger_id, charger_lat, charger_long))
+
+    return closest_chargers

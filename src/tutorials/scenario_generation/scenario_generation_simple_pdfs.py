@@ -37,7 +37,7 @@ def main():
         - Generated statistical output dataframe is converted into an input dataframe for simulators, which are explained under 'tutorials/simulations'.
 
     The statistical data for both arrival and departure times are based on a research Takahashi, Tamura, et al.,
-    'Day-Ahead Planning for EV Aggregators Based on Statistical Analysis of Road Traffic Data in Japan'
+    'Day-Ahead Planning for EV Aggregators Based on Statistical Analysis of Road Traffic data in Japan'
     in 2020 International Conference on Smart Grids and Energy Systems (SGES), 2020, DOI 10.1109/SGES51519.2020.00028.
     The rest of the data is not based on any research, the purpose of this tutorial is just to provide the user an
     example use-case.
