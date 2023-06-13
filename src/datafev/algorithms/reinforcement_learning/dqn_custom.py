@@ -61,7 +61,7 @@ def compute_loss(experiences, gamma, q_network, target_q_network):
     """
 
     states, actions, rewards, next_states, dones = experiences
-    current_Q = q_network(states).gather(1, actions)  # Q-value from Q-network
+    current_Q = q_network(states).gather(1, actions.unsqueeze(1))  # Q-value from Q-network
     next_Q = target_q_network(next_states).detach().max(1)[0].unsqueeze(1)  # Maximum Q-value from target Q-network
     target_Q = rewards + (gamma * next_Q * (1 - dones))  # Target Q-value
     loss = nn.MSELoss()(current_Q, target_Q)  # Compute MSE loss
@@ -81,12 +81,31 @@ def agent_learn(experiences, gamma, q_network, target_q_network, optimizer):
         Nothing
     """
 
+    # Convert NumPy arrays to PyTorch tensors
+    states, actions, rewards, next_states, dones = experiences
+    states = torch.tensor(states, dtype=torch.float32)
+    actions = torch.tensor(actions, dtype=torch.int64)
+    rewards = torch.tensor(rewards, dtype=torch.float32)
+    next_states = torch.tensor(next_states, dtype=torch.float32)
+    dones = torch.tensor(dones, dtype=torch.float32)
+    experiences = (states, actions, rewards, next_states, dones)
+
     loss = compute_loss(experiences, gamma, q_network, target_q_network)  # Compute loss
     optimizer.zero_grad()  # Zero out gradients
     loss.backward()  # Backpropagate loss
     optimizer.step()  # Update weights
 
-def train(environment, epsilon, discount_factor, num_episodes, batch_size, max_num_timesteps, gamma, state_dim, action_dim, layers=[64, 128, 128, 64]):
+def train(
+        environment,
+        epsilon,
+        discount_factor,
+        num_episodes,
+        batch_size,
+        max_num_timesteps,
+        state_dim,
+        action_dim,
+        layers=[64, 128, 128, 64]
+):
     """Main training loop
 
     Args:
@@ -96,7 +115,6 @@ def train(environment, epsilon, discount_factor, num_episodes, batch_size, max_n
         num_episodes: How many times to run the simulation
         batch_size: Size of replay buffer
         max_num_timesteps: Max amount of steps to take in simulation before ending
-        gamma: Discount factor for DQL
         state_dim: How many state variables are used
         action_dim: How many actions can the system choose from
         layers: Array of hidden layers and their sizes (e.g. [64, 128, 128, 64])
@@ -111,21 +129,22 @@ def train(environment, epsilon, discount_factor, num_episodes, batch_size, max_n
 
     for i in range(num_episodes):  # For each episode
         state = environment.reset()  # Reset environment
+        print(f"Episode: {i}")
 
         for j in range(max_num_timesteps):  # For each timestep
-            state = torch.FloatTensor(state)  # Convert state to tensor
+            state = torch.tensor(state, dtype=torch.float32)  # Convert state to tensor
             if np.random.rand() < epsilon:  # Epsilon-greedy action selection
                 action = np.random.choice(action_dim)  # Random action
             else:
                 action = q_network(state).argmax().item()  # Greedy action
 
-            next_state, reward, done, _ = environment.step(action)  # Execute action
+            next_state, reward, done = environment.step(action)  # Execute action
             buffer.append(experience(state, action, reward, next_state, done))  # Store experience
 
             if len(buffer) >= batch_size:  # If replay buffer is full enough
                 mini_batch = random.sample(buffer, batch_size)  # Sample a mini-batch
                 experiences = map(np.stack, zip(*mini_batch))  # Format experiences
-                agent_learn(experiences, gamma, q_network, target_q_network, optimizer)  # Update networks
+                agent_learn(experiences, discount_factor, q_network, target_q_network, optimizer)  # Update networks
 
             if done:  # If episode is done
                 break
