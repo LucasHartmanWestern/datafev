@@ -1,5 +1,7 @@
 import copy
 import csv
+import math
+
 from geolocation.maps_free import get_closest_chargers, move_towards, get_distance_and_time
 from geolocation.visualize import read_excel_data
 
@@ -12,6 +14,7 @@ from geolocation.visualize import read_excel_data
 class EVSimEnvironment:
     def __init__(
             self,
+            num_of_episodes,
             num_of_chargers,
             make,
             model,
@@ -39,8 +42,11 @@ class EVSimEnvironment:
             Environment to use for EV simulations
         """
 
+        self.num_of_episodes = num_of_episodes
         self.episode_num = 0
         self.visited_list = []
+
+        self.prev_distance = 0
 
         self.num_of_chargers = num_of_chargers
         self.make = make
@@ -81,8 +87,6 @@ class EVSimEnvironment:
             done: Indicator for if simulation is done
         """
 
-        self.visited_list.append(self.episode_num, self.cur_lat, self.cur_long)
-
         current_state = copy.copy(self.state)
         done = False
         if self.is_charging == False:
@@ -107,13 +111,27 @@ class EVSimEnvironment:
         else:
             # Increase battery while charging
             self.cur_soc += self.charge_per_hour
-            if action == 0:
+            if self.cur_soc > self.max_soc: self.cur_soc = self.max_soc
+            if action == 0 or self.cur_soc >= self.max_soc:
                 self.is_charging = False
                 # Drive 15 minutes towards selected destination
                 self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15)
 
         # Update state
         self.update_state()
+
+        # Log every tenth episode
+        if self.episode_num % math.ceil(self.num_of_episodes / 10) == 0:
+            new_row = []
+            new_row.append(self.episode_num)
+            new_row.append(self.cur_lat)
+            new_row.append(self.cur_long)
+
+            for charger in self.charger_coords:
+                new_row.append(charger[1])
+                new_row.append(charger[2])
+
+            self.visited_list.append(new_row)
 
         return self.state, self.reward(current_state), done
 
@@ -135,6 +153,7 @@ class EVSimEnvironment:
         #  +10 for each charging station within range
         #  +100 for being able to make it to the destination
         #  +1-10 for being closer to 80% SoC
+        #  -25 for moving away from the destination
 
         make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
         usage_per_hour, charge_per_hour = self.ev_info()
@@ -153,6 +172,12 @@ class EVSimEnvironment:
         # Increase reward by 100 if able to get to destination
         if usage_per_hour * time_to_dest < cur_soc:
             reward += 100
+
+        if self.prev_distance != 0:
+            if self.prev_distance <= distance_to_dest:
+                reward -= 100
+
+        self.prev_distance = distance_to_dest
 
         battery_percentage = self.cur_soc / self.max_soc
         reward += min(max(1 + 9 * abs(battery_percentage - 0.8), 1), 10)
@@ -183,10 +208,19 @@ class EVSimEnvironment:
         actions = 1 + self.num_of_chargers
         return states, actions
 
-    def write_path_to_csv(self):
-        with open('outputs/routes.csv', 'w', newline='') as file:
+    def write_path_to_csv(self, path):
+        with open(path, 'w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['Episode Num', 'Latitude', 'Longitude'])
+            header_row = []
+            header_row.append('Episode Num')
+            header_row.append('Latitude')
+            header_row.append('Longitude')
+
+            for i in range(self.num_of_chargers):
+                header_row.append(f"Charger {i + 1} Latitude")
+                header_row.append(f"Charger {i + 1} Longitude")
+
+            writer.writerow(header_row)
 
             for row in self.visited_list:
                 writer.writerow(row)

@@ -7,6 +7,10 @@ def read_excel_data(file_path, sheet_name):
     df = pd.read_excel(file_path, sheet_name=sheet_name)
     return df
 
+def read_csv_data(file_path):
+    df = pd.read_csv(file_path)
+    return df
+
 def generate_plot(df):
     """Visualize the data using a graph.
     The graph connects the coordinates in the Latitude and Longitude columns
@@ -35,7 +39,7 @@ def generate_plot(df):
     # Show the plot
     plt.show()
 
-def generate_interactive_plot(df):
+def generate_interactive_plot(df, origin, destination):
     """Visualize the data using an interactive graph.
     The graph connects the coordinates in the Latitude and Longitude columns
     and plots the coordinates in the various (CX_Latitude, CX_Longitude) columns."""
@@ -43,25 +47,41 @@ def generate_interactive_plot(df):
     # Initialize the plot
     fig = go.Figure()
 
-    # Plot main path
     fig.add_trace(go.Scatter(
-        x=df['Longitude'],
-        y=df['Latitude'],
-        mode='markers+lines',
-        name='Main Path',
-        text=df['TimeStep'],  # this will be displayed when a point is hovered
-        hovertemplate='TimeStep: %{text}<br>Lat: %{y}<br>Lon: %{x}'  # custom hover text
+        x=[origin[1]],
+        y=[origin[0]],
+        mode='markers',  # add markers here
+        name='Origin'
     ))
+    fig.add_trace(go.Scatter(
+        x=[destination[1]],
+        y=[destination[0]],
+        mode='markers',  # add markers here
+        name='Destination'
+    ))
+
+    count = 0
+    for dataset in df:
+        count += 1
+        # Plot main path
+        fig.add_trace(go.Scatter(
+            x=dataset['Longitude'],
+            y=dataset['Latitude'],
+            mode='markers+lines',
+            name=f'Path {count}',
+            text=dataset['Episode Num'],  # this will be displayed when a point is hovered
+            hovertemplate='Episode: %{text}<br>Lat: %{y}<br>Lon: %{x}'  # custom hover text
+        ))
 
     # Plot additional paths
     for i in range(1, 11):
-        lat_key = f'C{i}_Latitude'
-        lon_key = f'C{i}_Longitude'
-        if lat_key in df.columns and lon_key in df.columns:
+        lat_key = f'Charger {i} Latitude'
+        lon_key = f'Charger {i} Longitude'
+        if lat_key in df[0].columns and lon_key in df[0].columns:
             fig.add_trace(go.Scatter(
-                x=df[lon_key],
-                y=df[lat_key],
-                mode='markers+lines',  # add markers here
+                x=[df[0].loc[0][lon_key]],
+                y=[df[0].loc[0][lat_key]],
+                mode='markers',  # add markers here
                 name=f'Charger {i}'
             ))
 

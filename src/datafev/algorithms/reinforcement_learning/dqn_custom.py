@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -85,9 +87,9 @@ def agent_learn(experiences, gamma, q_network, target_q_network, optimizer):
     states, actions, rewards, next_states, dones = experiences
     states = torch.tensor(states, dtype=torch.float32)
     actions = torch.tensor(actions, dtype=torch.int64)
-    rewards = torch.tensor(rewards, dtype=torch.float32)
+    rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1)
     next_states = torch.tensor(next_states, dtype=torch.float32)
-    dones = torch.tensor(dones, dtype=torch.float32)
+    dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1)
     experiences = (states, actions, rewards, next_states, dones)
 
     loss = compute_loss(experiences, gamma, q_network, target_q_network)  # Compute loss
@@ -129,7 +131,8 @@ def train(
 
     for i in range(num_episodes):  # For each episode
         state = environment.reset()  # Reset environment
-        print(f"Episode: {i}")
+        if i % math.ceil(num_episodes / 10) == 0:
+            print(f"Episode: {i}")
 
         for j in range(max_num_timesteps):  # For each timestep
             state = torch.tensor(state, dtype=torch.float32)  # Convert state to tensor
