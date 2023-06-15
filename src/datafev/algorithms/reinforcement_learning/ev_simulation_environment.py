@@ -87,6 +87,20 @@ class EVSimEnvironment:
             done: Indicator for if simulation is done
         """
 
+        # Log every tenth episode
+        if self.episode_num % math.ceil(self.num_of_episodes / 10) == 0:
+            new_row = []
+            new_row.append(self.episode_num)
+            new_row.append(action)
+            new_row.append(self.cur_lat)
+            new_row.append(self.cur_long)
+
+            for charger in self.charger_coords:
+                new_row.append(charger[1])
+                new_row.append(charger[2])
+
+            self.visited_list.append(new_row)
+
         current_state = copy.copy(self.state)
         done = False
         if self.is_charging == False:
@@ -119,19 +133,6 @@ class EVSimEnvironment:
 
         # Update state
         self.update_state()
-
-        # Log every tenth episode
-        if self.episode_num % math.ceil(self.num_of_episodes / 10) == 0:
-            new_row = []
-            new_row.append(self.episode_num)
-            new_row.append(self.cur_lat)
-            new_row.append(self.cur_long)
-
-            for charger in self.charger_coords:
-                new_row.append(charger[1])
-                new_row.append(charger[2])
-
-            self.visited_list.append(new_row)
 
         return self.state, self.reward(current_state), done
 
@@ -213,6 +214,7 @@ class EVSimEnvironment:
             writer = csv.writer(file)
             header_row = []
             header_row.append('Episode Num')
+            header_row.append('Action')
             header_row.append('Latitude')
             header_row.append('Longitude')
 

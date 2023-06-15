@@ -69,8 +69,8 @@ def generate_interactive_plot(df, origin, destination):
             y=dataset['Latitude'],
             mode='markers+lines',
             name=f'Path {count}',
-            text=dataset['Episode Num'],  # this will be displayed when a point is hovered
-            hovertemplate='Episode: %{text}<br>Lat: %{y}<br>Lon: %{x}'  # custom hover text
+            customdata=dataset[['Episode Num', 'Action']].values.tolist(),
+            hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>Lat: %{y}<br>Lon: %{x}'
         ))
 
     # Plot additional paths
