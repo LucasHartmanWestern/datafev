@@ -44,6 +44,8 @@ def generate_interactive_plot(df, origin, destination):
     The graph connects the coordinates in the Latitude and Longitude columns
     and plots the coordinates in the various (CX_Latitude, CX_Longitude) columns."""
 
+    # TODO - Add total reward to graph
+
     # Initialize the plot
     fig = go.Figure()
 
@@ -69,8 +71,8 @@ def generate_interactive_plot(df, origin, destination):
             y=dataset['Latitude'],
             mode='markers+lines',
             name=f'Path {count}',
-            customdata=dataset[['Episode Num', 'Action', 'SoC', 'Is Charging']].values.tolist(),
-            hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>SoC: %{customdata[2]}kW<br>Charging: %{customdata[3]}<br>Lat: %{y}<br>Lon: %{x}'
+            customdata=dataset[['Episode Num', 'Action', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist(),
+            hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>SoC: %{customdata[2]}kW<br>Charging: %{customdata[3]}<br>Episode Reward: %{customdata[4]}<br>Lat: %{y}<br>Lon: %{x}'
         ))
 
     # Plot additional paths

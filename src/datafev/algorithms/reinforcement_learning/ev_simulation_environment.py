@@ -46,6 +46,9 @@ class EVSimEnvironment:
         self.episode_num = 0
         self.visited_list = []
 
+        self.step_num = 0
+        self.episode_reward = 0
+
         self.prev_distance = 0
 
         self.num_of_chargers = num_of_chargers
@@ -87,6 +90,8 @@ class EVSimEnvironment:
             done: Indicator for if simulation is done
         """
 
+        self.step_num += 1
+
         # Log every tenth episode
         if self.episode_num % math.ceil(self.num_of_episodes / 10) == 0:
             new_row = []
@@ -94,6 +99,7 @@ class EVSimEnvironment:
             new_row.append(action)
             new_row.append(self.cur_soc / 1000)
             new_row.append(self.is_charging)
+            new_row.append(self.episode_reward)
             new_row.append(self.cur_lat)
             new_row.append(self.cur_long)
 
@@ -107,39 +113,48 @@ class EVSimEnvironment:
         done = False
         if self.is_charging == False:
             # Consume battery while driving
-            self.cur_soc -= self.usage_per_hour / 4
+            self.cur_soc -= self.usage_per_hour / (4 * 60)
             if action == 0:
                 # Drive 15 minutes towards selected destination
-                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15)
+                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15 / 60)
                 # Find how far destination is away from current coordinates in minutes
                 time_to_destination = get_distance_and_time((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long))[1] / 60
                 # Start charging EV if within 15 minutes of charging station
-                if time_to_destination <= 15 / 60:
+                if time_to_destination <= 15:
                     done = True
             else:
                 # Drive 15 minutes towards selected destination
-                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.charger_info.loc[action - 1].latitude, self.charger_info.loc[action - 1].longitude), 15)
+                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.charger_info.loc[action - 1].latitude, self.charger_info.loc[action - 1].longitude), 15 / 60)
                 # Find how far station is away from current coordinates in minutes
                 time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (self.charger_info.loc[action - 1].latitude, self.charger_info.loc[action - 1].longitude))[1] / 60
                 # Start charging EV if within 15 minutes of charging station
-                if time_to_station <= 15 / 60:
+                if time_to_station <= 15:
                     self.is_charging = True
+
+            if self.cur_soc <= 0:
+                done = True
         else:
             # Increase battery while charging
-            self.cur_soc += self.charge_per_hour / 4
+            self.cur_soc += self.charge_per_hour / (4 * 60)
             if self.cur_soc > self.max_soc: self.cur_soc = self.max_soc
             if action == 0 or self.cur_soc >= self.max_soc:
                 self.is_charging = False
                 # Drive 15 minutes towards selected destination
-                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15)
+                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15 / 60)
 
         # Update state
         self.update_state()
+
+        self.episode_reward += self.reward(current_state)
 
         return self.state, self.reward(current_state), done
 
     # Reset all states
     def reset(self):
+        self.step_num = 0
+
+        self.episode_reward = 0
+
         self.cur_soc = self.base_soc
         self.cur_lat = self.org_lat
         self.cur_long = self.org_long
@@ -153,37 +168,45 @@ class EVSimEnvironment:
 
     # Get reward
     def reward(self, state):
-        #  +10 for each charging station within range
-        #  +100 for being able to make it to the destination
+        #  +1 for each charging station within range
+        #  +10 for being able to make it to the destination
         #  +1-10 for being closer to 80% SoC
-        #  -25 for moving away from the destination
+        #  -25 for moving away from the destination (remove)
+        #  -1 for each timestep
+        #  -1000 and done if run out of SoC
 
         make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
         usage_per_hour, charge_per_hour = self.ev_info()
 
         reward = 0
 
+        reward -= self.step_num
+
         for i in range(len(self.charger_coords)):
             distance_to_station, time_to_station = get_distance_and_time((cur_lat, cur_long), (self.charger_coords[i][0], self.charger_coords[i][1]))
             time_to_station /= 3600 # Convert to hours
             # Increase reward by 10 for each charging station within range
             if usage_per_hour * time_to_station < cur_soc:
-                reward += 10
+                reward += 1
 
         distance_to_dest, time_to_dest = get_distance_and_time((cur_lat, cur_long), (dest_lat, dest_long))
         time_to_dest /= 3600  # Convert to hours
-        # Increase reward by 100 if able to get to destination
+        # Increase reward by 10 if able to get to destination
         if usage_per_hour * time_to_dest < cur_soc:
-            reward += 100
+            reward += 10
 
-        if self.prev_distance != 0:
-            if self.prev_distance <= distance_to_dest:
-                reward -= 100
+        # Might add back later
+        # if self.prev_distance != 0:
+        #     if self.prev_distance <= distance_to_dest:
+        #         reward -= 100
 
         self.prev_distance = distance_to_dest
 
         battery_percentage = self.cur_soc / self.max_soc
         reward += min(max(1 + 9 * abs(battery_percentage - 0.8), 1), 10)
+
+        if self.cur_soc <= 0:
+            reward -= 1000
 
         return reward
 
@@ -219,6 +242,7 @@ class EVSimEnvironment:
             header_row.append('Action')
             header_row.append('SoC')
             header_row.append('Is Charging')
+            header_row.append('Episode Reward')
             header_row.append('Latitude')
             header_row.append('Longitude')
 
