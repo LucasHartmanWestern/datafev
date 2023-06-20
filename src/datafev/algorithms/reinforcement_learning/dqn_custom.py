@@ -6,6 +6,7 @@ import torch.optim as optim
 import numpy as np
 from collections import namedtuple
 import random
+import os
 
 # Define the QNetwork architecture
 class QNetwork(nn.Module):
@@ -106,7 +107,8 @@ def train(
         max_num_timesteps,
         state_dim,
         action_dim,
-        layers=[64, 128, 128, 64]
+        load_saved=False,
+        layers=[64, 128, 1024, 128, 64]
 ):
     """Main training loop
 
@@ -119,6 +121,7 @@ def train(
         max_num_timesteps: Max amount of steps to take in simulation before ending
         state_dim: How many state variables are used
         action_dim: How many actions can the system choose from
+        load_saved: Reload last training model at start of training process
         layers: Array of hidden layers and their sizes (e.g. [64, 128, 128, 64])
 
     Returns:
@@ -126,6 +129,12 @@ def train(
     """
 
     q_network, target_q_network = initialize(state_dim, action_dim, layers)  # Initialize networks
+
+    if load_saved:
+        # Save the networks at the end of the episode
+        load_model(q_network, 'saved_networks/q_network.pth')
+        load_model(target_q_network, 'saved_networks/target_q_network.pth')
+
     optimizer = optim.Adam(q_network.parameters())  # Initialize optimizer
     buffer = []  # Initialize replay buffer
 
@@ -156,3 +165,17 @@ def train(
         epsilon *= discount_factor  # Decay epsilon
         if i % 10 == 0:  # Every ten episodes
             target_q_network.load_state_dict(q_network.state_dict())  # Update target network
+
+    # Add this before you save your model
+    if not os.path.exists('saved_networks'):
+        os.makedirs('saved_networks')
+
+    # Save the networks at the end of training
+    save_model(q_network, 'saved_networks/q_network.pth')
+    save_model(target_q_network, 'saved_networks/target_q_network.pth')
+
+def save_model(network, filename):
+    torch.save(network.state_dict(), filename)
+
+def load_model(network, filename):
+    network.load_state_dict(torch.load(filename))

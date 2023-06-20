@@ -71,8 +71,8 @@ def generate_interactive_plot(df, origin, destination):
             y=dataset['Latitude'],
             mode='markers+lines',
             name=f'Path {count}',
-            customdata=dataset[['Episode Num', 'Action', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist(),
-            hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>SoC: %{customdata[2]}kW<br>Charging: %{customdata[3]}<br>Episode Reward: %{customdata[4]}<br>Lat: %{y}<br>Lon: %{x}'
+            customdata=dataset[['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist(),
+            hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>Timestep: %{customdata[2]}<br>SoC: %{customdata[3]}kW<br>Charging: %{customdata[4]}<br>Episode Reward: %{customdata[5]}<br>Lat: %{y}<br>Lon: %{x}'
         ))
 
     # Plot additional paths

@@ -18,10 +18,10 @@ env = EVSimEnvironment(num_episodes, num_of_chargers, make, model, starting_char
 epsilon = 0.05
 discount_factor = 0.9
 batch_size = 50
-max_num_timesteps = 25
+max_num_timesteps = 50
 
 state_dimension, action_dimension = env.get_state_action_dimension()
-train(env, epsilon, discount_factor, num_episodes, batch_size, max_num_timesteps, state_dimension, action_dimension - 1)
+train(env, epsilon, discount_factor, num_episodes, batch_size, max_num_timesteps, state_dimension, action_dimension - 1, True)
 
 env.write_path_to_csv('outputs/routes.csv')
 

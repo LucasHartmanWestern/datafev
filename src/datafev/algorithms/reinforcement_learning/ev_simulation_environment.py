@@ -145,6 +145,7 @@ class EVSimEnvironment:
         new_row = []
         new_row.append(self.episode_num)
         new_row.append(action)
+        new_row.append(self.step_num)
         new_row.append(round(self.cur_soc / 1000, 2))
         new_row.append(self.is_charging)
         new_row.append(round(self.episode_reward, 2))
@@ -252,6 +253,7 @@ class EVSimEnvironment:
             header_row = []
             header_row.append('Episode Num')
             header_row.append('Action')
+            header_row.append('Timestep')
             header_row.append('SoC')
             header_row.append('Is Charging')
             header_row.append('Episode Reward')
