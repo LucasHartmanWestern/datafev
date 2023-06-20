@@ -15,10 +15,10 @@ num_episodes = 10000
 
 env = EVSimEnvironment(num_episodes, num_of_chargers, make, model, starting_charge, max_charge, org_lat, org_long, dest_lat, dest_long)
 
-epsilon = 0.01
+epsilon = 0.05
 discount_factor = 0.9
-batch_size = 100
-max_num_timesteps = 100
+batch_size = 50
+max_num_timesteps = 25
 
 state_dimension, action_dimension = env.get_state_action_dimension()
 train(env, epsilon, discount_factor, num_episodes, batch_size, max_num_timesteps, state_dimension, action_dimension - 1)
