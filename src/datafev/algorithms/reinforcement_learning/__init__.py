@@ -19,11 +19,12 @@ epsilon = 0.1
 discount_factor = 0.99
 batch_size = 100
 buffer_limit = 250
-max_num_timesteps = 50
-start_from_previous_session = False
+max_num_timesteps = 100
+start_from_previous_session = True
+layers = [64, 128, 128, 64]
 
 state_dimension, action_dimension = env.get_state_action_dimension()
-train(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session)
+train(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
 
 env.write_path_to_csv('outputs/routes.csv')
 

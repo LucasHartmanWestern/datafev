@@ -206,8 +206,8 @@ class EVSimEnvironment:
         #  +15 for continuing to charge when below 80% battery
         #  -15 for moving away from the destination
         #  -1 for each timestep
-        #  -1000 and done if run out of SoC
-        #  +1000 for reaching the destination
+        #  -100000 and done if run out of SoC
+        #  +100000 for reaching the destination
         #  +1 for each percentage closer to destination from origin
 
         make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
@@ -241,7 +241,12 @@ class EVSimEnvironment:
             reward += 50
 
         # +1 for each percentage closer to destination from origin
-        reward += int(distance_from_origin / distance_to_dest) * 1
+        if distance_to_dest == 0:
+            reward += 100
+        elif distance_from_origin < distance_to_dest:
+            reward += -distance_to_dest / distance_from_origin
+        else:
+            reward += 100 * (1 - (distance_to_dest / distance_from_origin))
 
         if self.prev_distance != 0:
             if self.prev_distance <= distance_to_dest:
@@ -253,10 +258,10 @@ class EVSimEnvironment:
         reward += min(max(1 + 9 * abs(battery_percentage - 0.8), 1), 10)
 
         if self.cur_soc <= 0:
-            reward -= 1000
+            reward -= 100000
 
         if time_to_dest < 15 and done:
-            reward += 1000
+            reward += 100000
 
         return reward
 
