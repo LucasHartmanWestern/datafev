@@ -40,6 +40,25 @@ def generate_plot(df):
     plt.show()
 
 
+def generate_average_reward_plot(df):
+    """Visualize the data using a graph.
+        The graph shows the average reward over time per episode"""
+
+    # Initialize the plot
+    plt.figure(figsize=(10, 8))
+
+    # Plot main path
+    plt.plot(df['Episode Num'], df['Average Reward'])
+
+    # Add legend, grid, title and labels
+    plt.grid(True)
+    plt.title('Average Reward vs Episode Num')
+    plt.ylabel('Average Reward')
+    plt.xlabel('Episode Num')
+
+    # Show the plot
+    plt.show()
+
 def generate_interactive_plot(dfs, origin, destination):
     """Visualize the data using an interactive graph."""
 

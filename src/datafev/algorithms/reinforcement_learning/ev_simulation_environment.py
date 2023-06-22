@@ -43,7 +43,7 @@ class EVSimEnvironment:
         """
 
         self.num_of_episodes = num_of_episodes
-        self.episode_num = 0
+        self.episode_num = -1
         self.visited_list = []
         self.current_path = []
         self.best_path = []
@@ -69,6 +69,8 @@ class EVSimEnvironment:
         self.org_long = org_long
         self.dest_lat = dest_lat
         self.dest_long = dest_long
+
+        self.average_reward = []
 
         self.usage_per_hour, self.charge_per_hour = self.ev_info()
 
@@ -146,7 +148,7 @@ class EVSimEnvironment:
         # Update state
         self.update_state()
 
-        reward = self.reward(current_state, done)
+        reward = self.reward3(current_state, done)
 
         self.episode_reward += reward
 
@@ -176,11 +178,22 @@ class EVSimEnvironment:
 
     # Reset all states
     def reset(self):
+
+        if self.episode_num != -1: # Ignore initial reset
+            self.episode_reward /= self.step_num # Average reward among steps
+
+            if self.episode_reward > self.max_reward:
+                self.best_path = self.current_path # Track best path
+
+            # Track average reward
+            if self.episode_num == 0:
+                self.average_reward.append((self.episode_reward, 0))
+            else:
+                prev_reward = self.average_reward[-1][0]
+                prev_reward *= self.episode_num
+                self.average_reward.append(((prev_reward + self.episode_reward) / (self.episode_num + 1), self.episode_num))
+
         self.step_num = 0
-
-        if self.episode_reward > self.max_reward:
-            self.best_path = self.current_path
-
         self.episode_reward = 0
 
         self.cur_soc = self.base_soc
@@ -196,8 +209,28 @@ class EVSimEnvironment:
 
         return self.state
 
+    # Scale negative rewards to fractions
+    def reward3(self, state, done):
+        reward = 0
+        make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
+        distance_from_origin, time_from_origin = get_distance_and_time((org_lat, org_long), (dest_lat, dest_long))
+        distance_to_dest, time_to_dest = get_distance_and_time((cur_lat, cur_long), (dest_lat, dest_long))
+        reward -= (distance_to_dest / distance_from_origin) * 100
+        reward -= (1 / (cur_soc / max_soc)) * 10
+        return reward
+
+    # Reward = -distance - 1/SoC
+    def reward2(self, state, done):
+        reward = 0
+        make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
+        distance_to_dest, time_to_dest = get_distance_and_time((cur_lat, cur_long), (dest_lat, dest_long))
+        reward -= distance_to_dest
+        reward -= 1 / cur_soc
+        return reward
+
+
     # Get reward
-    def reward(self, state, done):
+    def reward1(self, state, done):
         #  +1 for each charging station within range
         #  +50 for being able to make it to the destination
         #  +1-10 for being closer to 80% SoC
@@ -207,7 +240,7 @@ class EVSimEnvironment:
         #  -15 for moving away from the destination
         #  -1 for each timestep
         #  -100000 and done if run out of SoC
-        #  +100000 for reaching the destination
+        #  +100000 for getting to a step before reaching the destination
         #  +1 for each percentage closer to destination from origin
 
         make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
@@ -260,7 +293,7 @@ class EVSimEnvironment:
         if self.cur_soc <= 0:
             reward -= 100000
 
-        if time_to_dest < 15 and done:
+        if time_to_dest < 30:
             reward += 100000
 
         return reward
@@ -289,8 +322,8 @@ class EVSimEnvironment:
         actions = 1 + self.num_of_chargers
         return states, actions
 
-    def write_path_to_csv(self, path):
-        with open(path, 'w', newline='') as file:
+    def write_path_to_csv(self, filepath):
+        with open(filepath, 'w', newline='') as file:
             writer = csv.writer(file)
             header_row = []
             header_row.append('Episode Num')
@@ -313,6 +346,14 @@ class EVSimEnvironment:
 
             for row in self.best_path:
                 row[0] = "Best"
+                writer.writerow(row)
+
+    def write_reward_graph_to_csv(self, filepath):
+        with open(filepath, 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Average Reward', 'Episode Num'])
+
+            for row in self.average_reward:
                 writer.writerow(row)
 
     def print(self):
