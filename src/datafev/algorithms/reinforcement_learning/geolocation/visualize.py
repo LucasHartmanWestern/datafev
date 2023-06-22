@@ -39,60 +39,95 @@ def generate_plot(df):
     # Show the plot
     plt.show()
 
-def generate_interactive_plot(df, origin, destination):
-    """Visualize the data using an interactive graph.
-    The graph connects the coordinates in the Latitude and Longitude columns
-    and plots the coordinates in the various (CX_Latitude, CX_Longitude) columns."""
 
-    # TODO - Add total reward to graph
+def generate_interactive_plot(dfs, origin, destination):
+    """Visualize the data using an interactive graph."""
 
-    # Initialize the plot
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
         x=[origin[1]],
         y=[origin[0]],
-        mode='markers',  # add markers here
-        name='Origin'
+        mode='markers',
+        name='Origin',
+        marker=dict(symbol='triangle-up', size=10)
     ))
     fig.add_trace(go.Scatter(
         x=[destination[1]],
         y=[destination[0]],
-        mode='markers',  # add markers here
-        name='Destination'
+        mode='markers',
+        name='Destination',
+        marker=dict(symbol='triangle-down', size=10)
     ))
 
-    count = 0
-    for dataset in df:
-        count += 1
-        # Plot main path
+    for idx, df in enumerate(dfs, start=1):
+        name = f'Path {idx}' if idx != len(dfs) else "Best Path"
+
+        # Plot the path
         fig.add_trace(go.Scatter(
-            x=dataset['Longitude'],
-            y=dataset['Latitude'],
+            x=df['Longitude'],
+            y=df['Latitude'],
             mode='markers+lines',
-            name=f'Path {count}',
-            customdata=dataset[['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist(),
+            name=name,
+            legendgroup=name,
+            customdata=df[
+                ['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist(),
             hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>Timestep: %{customdata[2]}<br>SoC: %{customdata[3]}kW<br>Charging: %{customdata[4]}<br>Episode Reward: %{customdata[5]}<br>Lat: %{y}<br>Lon: %{x}'
         ))
 
-    # Plot additional paths
+        # Plot the last point with a different marker
+        fig.add_trace(go.Scatter(
+            x=[df['Longitude'].iloc[-1]],
+            y=[df['Latitude'].iloc[-1]],
+            mode='markers',
+            name=f'End {name}',
+            marker=dict(symbol='star', size=10),
+            legendgroup=name,
+            showlegend=False,
+            customdata=[
+                df[['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist()[-1]],
+            hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>Timestep: %{customdata[2]}<br>SoC: %{customdata[3]}kW<br>Charging: %{customdata[4]}<br>Episode Reward: %{customdata[5]}<br>Lat: %{y}<br>Lon: %{x}'
+        ))
+
     for i in range(1, 11):
         lat_key = f'Charger {i} Latitude'
         lon_key = f'Charger {i} Longitude'
-        if lat_key in df[0].columns and lon_key in df[0].columns:
+        if lat_key in dfs[0].columns and lon_key in dfs[0].columns:
             fig.add_trace(go.Scatter(
-                x=[df[0].loc[0][lon_key]],
-                y=[df[0].loc[0][lat_key]],
-                mode='markers',  # add markers here
+                x=[dfs[0].iloc[0][lon_key]],
+                y=[dfs[0].iloc[0][lat_key]],
+                mode='markers',
                 name=f'Charger {i}'
             ))
 
-    # Add labels and title
     fig.update_layout(
         title='Paths',
         xaxis_title='Longitude',
-        yaxis_title='Latitude'
+        yaxis_title='Latitude',
+        annotations=[
+            dict(
+                x=origin[1],
+                y=origin[0],
+                xref="x",
+                yref="y",
+                text="Origin",
+                showarrow=True,
+                arrowhead=2,
+                ax=20,
+                ay=-40
+            ),
+            dict(
+                x=destination[1],
+                y=destination[0],
+                xref="x",
+                yref="y",
+                text="Destination",
+                showarrow=True,
+                arrowhead=2,
+                ax=-20,
+                ay=40
+            )
+        ]
     )
 
-    # Show the plot
     fig.show()

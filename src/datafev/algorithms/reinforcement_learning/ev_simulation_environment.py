@@ -45,11 +45,17 @@ class EVSimEnvironment:
         self.num_of_episodes = num_of_episodes
         self.episode_num = 0
         self.visited_list = []
+        self.current_path = []
+        self.best_path = []
 
         self.step_num = 0
         self.episode_reward = 0
 
+        self.max_reward = math.inf * -1
+
         self.prev_distance = 0
+
+        self.prev_charging = False
 
         self.num_of_chargers = num_of_chargers
         self.make = make
@@ -131,15 +137,20 @@ class EVSimEnvironment:
 
             if action == 0 or self.cur_soc >= self.max_soc or time_to_station > 15 / 60:
                 self.is_charging = False
+                self.prev_charging = False
                 # Drive 15 minutes towards selected destination
                 self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15)
+            else:
+                self.prev_charging = True
 
         # Update state
         self.update_state()
 
-        self.episode_reward += self.reward(current_state)
+        reward = self.reward(current_state, done)
 
-        return self.state, self.reward(current_state), done
+        self.episode_reward += reward
+
+        return self.state, reward, done
 
     def log(self, action, final = False):
         new_row = []
@@ -160,17 +171,23 @@ class EVSimEnvironment:
             new_row.append(charger[1])
             new_row.append(charger[2])
 
+        self.current_path.append(new_row)
         self.visited_list.append(new_row)
 
     # Reset all states
     def reset(self):
         self.step_num = 0
 
+        if self.episode_reward > self.max_reward:
+            self.best_path = self.current_path
+
         self.episode_reward = 0
 
         self.cur_soc = self.base_soc
         self.cur_lat = self.org_lat
         self.cur_long = self.org_long
+
+        self.current_path = []
 
         self.episode_num += 1
 
@@ -180,13 +197,18 @@ class EVSimEnvironment:
         return self.state
 
     # Get reward
-    def reward(self, state):
+    def reward(self, state, done):
         #  +1 for each charging station within range
-        #  +10 for being able to make it to the destination
+        #  +50 for being able to make it to the destination
         #  +1-10 for being closer to 80% SoC
-        #  -25 for moving away from the destination (remove)
+        #  -50 for charging when above 80% battery
+        #  +25 for reaching a charging station with less than 20% battery
+        #  +15 for continuing to charge when below 80% battery
+        #  -15 for moving away from the destination
         #  -1 for each timestep
         #  -1000 and done if run out of SoC
+        #  +1000 for reaching the destination
+        #  +1 for each percentage closer to destination from origin
 
         make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
         usage_per_hour, charge_per_hour = self.ev_info()
@@ -202,16 +224,28 @@ class EVSimEnvironment:
             if usage_per_hour * time_to_station < cur_soc:
                 reward += 1
 
+        if self.is_charging and self.prev_charging == False and cur_soc / max_soc < 0.2:
+            reward += 25
+
+        if self.is_charging and self.prev_charging and cur_soc / max_soc < 0.8:
+            reward += 15
+
+        if self.is_charging and cur_soc / max_soc > 0.8:
+            reward -= 50
+
+        distance_from_origin, time_from_origin = get_distance_and_time((org_lat, org_long), (dest_lat, dest_long))
         distance_to_dest, time_to_dest = get_distance_and_time((cur_lat, cur_long), (dest_lat, dest_long))
         time_to_dest /= 3600  # Convert to hours
-        # Increase reward by 10 if able to get to destination
+        # Increase reward by 50 if able to get to destination
         if usage_per_hour * time_to_dest < cur_soc:
-            reward += 10
+            reward += 50
 
-        # Might add back later
-        # if self.prev_distance != 0:
-        #     if self.prev_distance <= distance_to_dest:
-        #         reward -= 100
+        # +1 for each percentage closer to destination from origin
+        reward += int(distance_from_origin / distance_to_dest) * 1
+
+        if self.prev_distance != 0:
+            if self.prev_distance <= distance_to_dest:
+                reward -= 15
 
         self.prev_distance = distance_to_dest
 
@@ -220,6 +254,9 @@ class EVSimEnvironment:
 
         if self.cur_soc <= 0:
             reward -= 1000
+
+        if time_to_dest < 15 and done:
+            reward += 1000
 
         return reward
 
@@ -267,6 +304,10 @@ class EVSimEnvironment:
             writer.writerow(header_row)
 
             for row in self.visited_list:
+                writer.writerow(row)
+
+            for row in self.best_path:
+                row[0] = "Best"
                 writer.writerow(row)
 
     def print(self):

@@ -15,13 +15,15 @@ num_episodes = 10000
 
 env = EVSimEnvironment(num_episodes, num_of_chargers, make, model, starting_charge, max_charge, org_lat, org_long, dest_lat, dest_long)
 
-epsilon = 0.05
-discount_factor = 0.9
-batch_size = 50
+epsilon = 0.1
+discount_factor = 0.99
+batch_size = 100
+buffer_limit = 250
 max_num_timesteps = 50
+start_from_previous_session = False
 
 state_dimension, action_dimension = env.get_state_action_dimension()
-train(env, epsilon, discount_factor, num_episodes, batch_size, max_num_timesteps, state_dimension, action_dimension - 1, True)
+train(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session)
 
 env.write_path_to_csv('outputs/routes.csv')
 

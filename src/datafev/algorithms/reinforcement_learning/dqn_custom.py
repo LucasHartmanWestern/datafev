@@ -7,6 +7,8 @@ import numpy as np
 from collections import namedtuple
 import random
 import os
+import time
+
 
 # Define the QNetwork architecture
 class QNetwork(nn.Module):
@@ -104,6 +106,7 @@ def train(
         discount_factor,
         num_episodes,
         batch_size,
+        buffer_limit,
         max_num_timesteps,
         state_dim,
         action_dim,
@@ -117,7 +120,8 @@ def train(
         epsilon: Measure for how often model will take a random action instead of the optimal one
         discount_factor: Factor to decrease the value of rewards with increasing timesteps
         num_episodes: How many times to run the simulation
-        batch_size: Size of replay buffer
+        batch_size: Size of mini batches
+        buffer_limit: Size of replay buffer
         max_num_timesteps: Max amount of steps to take in simulation before ending
         state_dim: How many state variables are used
         action_dim: How many actions can the system choose from
@@ -138,10 +142,15 @@ def train(
     optimizer = optim.Adam(q_network.parameters())  # Initialize optimizer
     buffer = []  # Initialize replay buffer
 
+    start_time = time.time()
+
     for i in range(num_episodes):  # For each episode
         state = environment.reset()  # Reset environment
-        if i % math.ceil(num_episodes / 10) == 0:
-            print(f"Episode: {i}")
+
+        # Log every tenth episode
+        if i % 10 == 0:
+            elapsed_time = time.time() - start_time
+            print(f"Episode: {i} - {int(elapsed_time // 3600)}h, {int((elapsed_time % 3600) // 60)}m, {int(elapsed_time % 60)}s")
 
         for j in range(max_num_timesteps):  # For each timestep
             state = torch.tensor(state, dtype=torch.float32)  # Convert state to tensor
@@ -153,7 +162,7 @@ def train(
             next_state, reward, done = environment.step(action)  # Execute action
             buffer.append(experience(state, action, reward, next_state, done))  # Store experience
 
-            if len(buffer) >= batch_size:  # If replay buffer is full enough
+            if len(buffer) >= buffer_limit:  # If replay buffer is full enough
                 mini_batch = random.sample(buffer, batch_size)  # Sample a mini-batch
                 experiences = map(np.stack, zip(*mini_batch))  # Format experiences
                 agent_learn(experiences, discount_factor, q_network, target_q_network, optimizer)  # Update networks
@@ -163,16 +172,19 @@ def train(
             state = next_state  # Update state
 
         epsilon *= discount_factor  # Decay epsilon
+
         if i % 10 == 0:  # Every ten episodes
             target_q_network.load_state_dict(q_network.state_dict())  # Update target network
 
-    # Add this before you save your model
-    if not os.path.exists('saved_networks'):
-        os.makedirs('saved_networks')
+            # Add this before you save your model
+            if not os.path.exists('saved_networks'):
+                os.makedirs('saved_networks')
 
-    # Save the networks at the end of training
-    save_model(q_network, 'saved_networks/q_network.pth')
-    save_model(target_q_network, 'saved_networks/target_q_network.pth')
+            # Save the networks at the end of training
+            save_model(q_network, 'saved_networks/q_network.pth')
+            save_model(target_q_network, 'saved_networks/target_q_network.pth')
+
+    environment.reset()  # Reset environment
 
 def save_model(network, filename):
     torch.save(network.state_dict(), filename)
