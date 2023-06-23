@@ -1,7 +1,10 @@
 import copy
 import csv
 import math
+import json
+import pandas as pd
 
+from collections import OrderedDict
 from geolocation.maps_free import get_closest_chargers, move_towards, get_distance_and_time
 from geolocation.visualize import read_excel_data
 
@@ -47,6 +50,7 @@ class EVSimEnvironment:
         self.visited_list = []
         self.current_path = []
         self.best_path = []
+        self.used_chargers = []
 
         self.step_num = 0
         self.episode_reward = 0
@@ -76,15 +80,31 @@ class EVSimEnvironment:
 
         self.is_charging = False
 
-        file_path = 'data/charging_stations.xlsx'
-        sheet_name = 'Station Info'
-        self.charger_info = read_excel_data(file_path, sheet_name)
+        self.get_charger_data()
+
+        self.get_charger_list()
+        self.update_state()
+
+    def get_charger_data(self):
+
+        # From CSV file
+        # file_path = 'data/charging_stations.xlsx'
+        # sheet_name = 'Station Info'
+        # self.charger_info = read_excel_data(file_path, sheet_name)
+
+        # From JSON file
+        with open('data/Ontario_Charger_Dataset.json') as file:
+            data = json.load(file)
+        charger_data = []
+        for station in data['fuel_stations']:
+            charger_id = station['id']
+            charger_lat = station['latitude']
+            charger_long = station['longitude']
+            charger_data.append([charger_id, charger_lat, charger_long])
+        self.charger_info = pd.DataFrame(charger_data, columns=['id', 'latitude', 'longitude'])
 
         self.charger_lat = self.charger_info.iloc[:, 1].tolist()  # Extract values from the 3rd column
         self.charger_long = self.charger_info.iloc[:, 2].tolist()  # Extract values from the 4th column
-
-        # Update state
-        self.update_state()
 
     def step(self, action):
         """Simulate a step in the EVs travel
@@ -121,9 +141,9 @@ class EVSimEnvironment:
                         self.log(action, True)
             else:
                 # Drive 15 minutes towards selected destination
-                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.charger_info.loc[action - 1].latitude, self.charger_info.loc[action - 1].longitude), 15)
+                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]), 15)
                 # Find how far station is away from current coordinates in minutes
-                time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (self.charger_info.loc[action - 1].latitude, self.charger_info.loc[action - 1].longitude))[1] / 60
+                time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]))[1] / 60
                 # Start charging EV if within 15 minutes of charging station
                 if time_to_station <= 15 / 60:
                     self.is_charging = True
@@ -135,7 +155,7 @@ class EVSimEnvironment:
             self.cur_soc += self.charge_per_hour / (4 * 60)
             if self.cur_soc > self.max_soc: self.cur_soc = self.max_soc
             if action != 0:
-                time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (self.charger_info.loc[action - 1].latitude, self.charger_info.loc[action - 1].longitude))[1] / 60
+                time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]))[1] / 60
 
             if action == 0 or self.cur_soc >= self.max_soc or time_to_station > 15 / 60:
                 self.is_charging = False
@@ -157,7 +177,10 @@ class EVSimEnvironment:
     def log(self, action, final = False):
         new_row = []
         new_row.append(self.episode_num)
-        new_row.append(action)
+        if action == 0:
+            new_row.append(action)
+        else:
+            new_row.append(self.charger_coords[action - 1][0])
         new_row.append(self.step_num)
         new_row.append(round(self.cur_soc / 1000, 2))
         new_row.append(self.is_charging)
@@ -169,21 +192,27 @@ class EVSimEnvironment:
             new_row.append(self.dest_lat)
             new_row.append(self.dest_long)
 
-        for charger in self.charger_coords:
-            new_row.append(charger[1])
-            new_row.append(charger[2])
-
         self.current_path.append(new_row)
         self.visited_list.append(new_row)
+
+    def get_charger_list(self):
+        list_of_chargers = list(zip(self.charger_lat, self.charger_long))
+        list_of_chargers = [(i, val1, val2) for i, (val1, val2) in enumerate(list_of_chargers)]
+        self.charger_coords = get_closest_chargers(self.cur_lat, self.cur_long, self.num_of_chargers, list_of_chargers)
+        for charger in self.charger_coords:
+            self.used_chargers.append(charger)
 
     # Reset all states
     def reset(self):
 
+        self.get_charger_list()
+
         if self.episode_num != -1: # Ignore initial reset
             self.episode_reward /= self.step_num # Average reward among steps
 
-            if self.episode_reward > self.max_reward:
-                self.best_path = self.current_path # Track best path
+            if self.episode_reward > self.max_reward and len(self.current_path) != 0:
+                self.best_path = self.current_path.copy() # Track best path
+                self.max_reward = self.episode_reward
 
             # Track average reward
             if self.episode_num == 0:
@@ -251,7 +280,7 @@ class EVSimEnvironment:
         reward -= self.step_num
 
         for i in range(len(self.charger_coords)):
-            distance_to_station, time_to_station = get_distance_and_time((cur_lat, cur_long), (self.charger_coords[i][0], self.charger_coords[i][1]))
+            distance_to_station, time_to_station = get_distance_and_time((cur_lat, cur_long), (self.charger_coords[i][1], self.charger_coords[i][2]))
             time_to_station /= 3600 # Convert to hours
             # Increase reward by 10 for each charging station within range
             if usage_per_hour * time_to_station < cur_soc:
@@ -306,11 +335,6 @@ class EVSimEnvironment:
         return usage_per_hour, charge_per_hour
 
     def update_state(self):
-
-        list_of_chargers = list(zip(self.charger_lat, self.charger_long))
-        list_of_chargers = [(i, val1, val2) for i, (val1, val2) in enumerate(list_of_chargers)]
-        self.charger_coords = get_closest_chargers(self.cur_lat, self.cur_long, self.num_of_chargers, list_of_chargers)
-
         self.state = (self.make, self.model, self.cur_soc, self.max_soc, self.base_soc, self.cur_lat, self.cur_long,
                       self.org_lat, self.org_long, self.dest_lat, self.dest_long, self.charger_coords)
 
@@ -335,18 +359,23 @@ class EVSimEnvironment:
             header_row.append('Latitude')
             header_row.append('Longitude')
 
-            for i in range(self.num_of_chargers):
-                header_row.append(f"Charger {i + 1} Latitude")
-                header_row.append(f"Charger {i + 1} Longitude")
-
             writer.writerow(header_row)
 
             for row in self.visited_list:
                 writer.writerow(row)
 
+            print(f'Best {self.best_path}')
             for row in self.best_path:
                 row[0] = "Best"
                 writer.writerow(row)
+
+    def write_chargers_to_csv(self, filepath):
+        self.used_chargers = list(dict.fromkeys(self.used_chargers))
+        with open(filepath, 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Charger ID', 'Latitude', 'Longitude'])
+            for charger in self.used_chargers:
+                writer.writerow(charger)
 
     def write_reward_graph_to_csv(self, filepath):
         with open(filepath, 'w', newline='') as file:

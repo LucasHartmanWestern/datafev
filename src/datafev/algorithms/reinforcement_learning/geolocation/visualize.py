@@ -59,74 +59,72 @@ def generate_average_reward_plot(df):
     # Show the plot
     plt.show()
 
-def generate_interactive_plot(dfs, origin, destination):
+def generate_interactive_plot(routes, chargers, origin, destination):
     """Visualize the data using an interactive graph."""
 
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
-        x=[origin[1]],
-        y=[origin[0]],
+        x=[origin[0]],
+        y=[origin[1]],
         mode='markers',
         name='Origin',
         marker=dict(symbol='triangle-up', size=10)
     ))
     fig.add_trace(go.Scatter(
-        x=[destination[1]],
-        y=[destination[0]],
+        x=[destination[0]],
+        y=[destination[1]],
         mode='markers',
         name='Destination',
         marker=dict(symbol='triangle-down', size=10)
     ))
 
-    for idx, df in enumerate(dfs, start=1):
-        name = f'Path {idx}' if idx != len(dfs) else "Best Path"
+    for idx, routes in enumerate(routes, start=1):
+        name = f'Path {routes.iloc[idx][0]}'
 
         # Plot the path
         fig.add_trace(go.Scatter(
-            x=df['Longitude'],
-            y=df['Latitude'],
+            x=routes['Latitude'],
+            y=routes['Longitude'],
             mode='markers+lines',
             name=name,
             legendgroup=name,
-            customdata=df[
+            customdata=routes[
                 ['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist(),
             hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>Timestep: %{customdata[2]}<br>SoC: %{customdata[3]}kW<br>Charging: %{customdata[4]}<br>Episode Reward: %{customdata[5]}<br>Lat: %{y}<br>Lon: %{x}'
         ))
 
         # Plot the last point with a different marker
         fig.add_trace(go.Scatter(
-            x=[df['Longitude'].iloc[-1]],
-            y=[df['Latitude'].iloc[-1]],
+            x=[routes['Latitude'].iloc[-1]],
+            y=[routes['Longitude'].iloc[-1]],
             mode='markers',
             name=f'End {name}',
             marker=dict(symbol='star', size=10),
             legendgroup=name,
             showlegend=False,
             customdata=[
-                df[['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist()[-1]],
+                routes[['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist()[-1]],
             hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>Timestep: %{customdata[2]}<br>SoC: %{customdata[3]}kW<br>Charging: %{customdata[4]}<br>Episode Reward: %{customdata[5]}<br>Lat: %{y}<br>Lon: %{x}'
         ))
 
-    for i in range(1, 11):
-        lat_key = f'Charger {i} Latitude'
-        lon_key = f'Charger {i} Longitude'
-        if lat_key in dfs[0].columns and lon_key in dfs[0].columns:
-            fig.add_trace(go.Scatter(
-                x=[dfs[0].iloc[0][lon_key]],
-                y=[dfs[0].iloc[0][lat_key]],
-                mode='markers',
-                name=f'Charger {i}'
-            ))
+    for i in range(len(chargers)):
+        fig.add_trace(go.Scatter(
+            x=[chargers.iloc[i][1]],
+            y=[chargers.iloc[i][2]],
+            mode='markers',
+            name=f'Charger {int(chargers.iloc[i][0])}'
+        ))
+
 
     fig.update_layout(
         title='Paths',
-        xaxis_title='Longitude',
-        yaxis_title='Latitude',
+        xaxis_title='Latitude',
+        yaxis_title='Longitude',
         annotations=[
             dict(
-                x=origin[1],
-                y=origin[0],
+                x=origin[0],
+                y=origin[1],
                 xref="x",
                 yref="y",
                 text="Origin",
@@ -136,8 +134,69 @@ def generate_interactive_plot(dfs, origin, destination):
                 ay=-40
             ),
             dict(
-                x=destination[1],
-                y=destination[0],
+                x=destination[0],
+                y=destination[1],
+                xref="x",
+                yref="y",
+                text="Destination",
+                showarrow=True,
+                arrowhead=2,
+                ax=-20,
+                ay=40
+            )
+        ]
+    )
+
+    fig.show()
+
+def generate_charger_only_plot(chargers, origin, destination):
+    """Visualize the data using an interactive graph."""
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=[origin[0]],
+        y=[origin[1]],
+        mode='markers',
+        name='Origin',
+        marker=dict(symbol='triangle-up', size=10)
+    ))
+    fig.add_trace(go.Scatter(
+        x=[destination[0]],
+        y=[destination[1]],
+        mode='markers',
+        name='Destination',
+        marker=dict(symbol='triangle-down', size=10)
+    ))
+
+    for i in range(len(chargers)):
+        fig.add_trace(go.Scatter(
+            x=[chargers.iloc[i][1]],
+            y=[chargers.iloc[i][2]],
+            mode='markers',
+            name=f'Charger {int(chargers.iloc[i][0])}'
+        ))
+
+
+    fig.update_layout(
+        title='Paths',
+        xaxis_title='Longitude',
+        yaxis_title='Latitude',
+        annotations=[
+            dict(
+                x=origin[0],
+                y=origin[1],
+                xref="x",
+                yref="y",
+                text="Origin",
+                showarrow=True,
+                arrowhead=2,
+                ax=20,
+                ay=-40
+            ),
+            dict(
+                x=destination[0],
+                y=destination[1],
                 xref="x",
                 yref="y",
                 text="Destination",
