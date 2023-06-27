@@ -9,6 +9,8 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 train_model = True
 generate_baseline = True
+start_from_previous_session = True
+save_data = True
 generate_plots = True
 
 ############
@@ -22,7 +24,7 @@ org_lat = 42.98904084
 org_long = -81.22821493
 dest_lat = 43.006137960450104
 dest_long = -81.27651959525788
-num_episodes = 10000
+num_episodes = 1000
 
 max_attempts = 10
 
@@ -32,22 +34,22 @@ if generate_baseline:
     baseline(env, max_attempts)
 
 if train_model:
-    epsilon = 0.20
+    epsilon = 0.60
     discount_factor = 0.9999
-    batch_size = 100
-    buffer_limit = 250
+    batch_size = 10
+    buffer_limit = 25
     max_num_timesteps = 50
-    start_from_previous_session = True
-    layers = [64, 128, 1024, 1024, 512, 128, 64]
+    layers = [32, 32, 32]
 
     state_dimension, action_dimension = env.get_state_action_dimension()
     train(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
 
-if generate_plots:
+if save_data:
     env.write_path_to_csv('outputs/routes.csv')
     env.write_chargers_to_csv('outputs/chargers.csv')
     env.write_reward_graph_to_csv('outputs/rewards.csv')
 
+if generate_plots:
     route_data = read_csv_data('outputs/routes.csv')
     charger_data = read_csv_data('outputs/chargers.csv')
     reward_data = read_csv_data('outputs/rewards.csv')
@@ -56,7 +58,7 @@ if generate_plots:
     for id_value, group in route_data.groupby('Episode Num'):
         route_datasets.append(group)
 
-    if train_model:
+    if train_model or start_from_previous_session:
         generate_average_reward_plot(reward_data)
 
     generate_interactive_plot(route_datasets, charger_data, (org_lat, org_long), (dest_lat, dest_long))

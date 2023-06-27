@@ -79,32 +79,32 @@ def generate_interactive_plot(routes, chargers, origin, destination):
         marker=dict(symbol='triangle-down', size=10)
     ))
 
-    for idx, routes in enumerate(routes, start=1):
-        name = f'Path {routes.iloc[idx][0]}'
+    for idx, route in enumerate(routes, start=1):
+        name = f'Path {route.iloc[0][0]}'  # Changed idx to 0 and routes to route
 
         # Plot the path
         fig.add_trace(go.Scatter(
-            x=routes['Latitude'],
-            y=routes['Longitude'],
+            x=route['Latitude'],
+            y=route['Longitude'],
             mode='markers+lines',
             name=name,
             legendgroup=name,
-            customdata=routes[
+            customdata=route[
                 ['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist(),
             hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>Timestep: %{customdata[2]}<br>SoC: %{customdata[3]}kW<br>Charging: %{customdata[4]}<br>Episode Reward: %{customdata[5]}<br>Lat: %{y}<br>Lon: %{x}'
         ))
 
         # Plot the last point with a different marker
         fig.add_trace(go.Scatter(
-            x=[routes['Latitude'].iloc[-1]],
-            y=[routes['Longitude'].iloc[-1]],
+            x=[route['Latitude'].iloc[-1]],
+            y=[route['Longitude'].iloc[-1]],
             mode='markers',
             name=f'End {name}',
             marker=dict(symbol='star', size=10),
             legendgroup=name,
             showlegend=False,
             customdata=[
-                routes[['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist()[-1]],
+                route[['Episode Num', 'Action', 'Timestep', 'SoC', 'Is Charging', 'Episode Reward']].values.tolist()[-1]],
             hovertemplate='Episode: %{customdata[0]}<br>Action: %{customdata[1]}<br>Timestep: %{customdata[2]}<br>SoC: %{customdata[3]}kW<br>Charging: %{customdata[4]}<br>Episode Reward: %{customdata[5]}<br>Lat: %{y}<br>Lon: %{x}'
         ))
 

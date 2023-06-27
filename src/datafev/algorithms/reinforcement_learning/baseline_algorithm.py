@@ -17,7 +17,7 @@ def baseline(environment, max_attempts):
 
     attempts = 0
 
-    make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = environment.state
+    make, model, battery_percentage, distance_to_dest, *charger_distances = environment.state
     usage_per_hour, charge_per_hour = environment.ev_info()
 
     populate_options(environment)
@@ -49,6 +49,7 @@ def baseline(environment, max_attempts):
 def find_best_charger(environment, max_distance):
     # Pick the best charger to go to
     current_best = (0, math.inf, math.inf)
+
     for i in range(len(environment.charger_coords) - 1):
         total_time = times[i + 1][1] + times[i + 1][2]
         if (i + 1) not in visited_chargers and total_time < current_best[1] + current_best[2] and max_distance > times[i + 1][1]:
@@ -59,19 +60,19 @@ def find_best_charger(environment, max_distance):
     return current_best
 
 def populate_options(environment):
-    make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = environment.state
+    make, model, battery_percentage, distance_to_dest, *charger_distances = environment.state
 
     times.clear()
 
     # Time for option 0
-    times.append((0, get_distance_and_time((cur_lat, cur_long), (dest_lat, dest_long))[1], 0))
+    times.append((0, get_distance_and_time((environment.cur_lat, environment.cur_long), (environment.dest_lat, environment.dest_long))[1], 0))
 
     for i in range(len(environment.charger_coords)):
         times.append((i + 1,
-                      get_distance_and_time((cur_lat, cur_long),
+                      get_distance_and_time((environment.cur_lat, environment.cur_long),
                                             (environment.charger_coords[i][1], environment.charger_coords[i][2]))[1],
                       get_distance_and_time((environment.charger_coords[i][1], environment.charger_coords[i][2]),
-                                            (dest_lat, dest_long))[1]))
+                                            (environment.dest_lat, environment.dest_long))[1]))
 
 def check_done(environment, max_distance):
     # Check if simulation can reach destination

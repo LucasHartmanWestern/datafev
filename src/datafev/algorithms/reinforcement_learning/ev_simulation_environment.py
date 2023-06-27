@@ -258,33 +258,25 @@ class EVSimEnvironment:
     # Scale negative rewards to fractions
     def reward3(self, state, done):
         reward = 0
-        make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
+        make, model, battery_percentage, distance_to_dest, *charger_distances = state
         usage_per_hour, charge_per_hour = self.ev_info()
 
-        distance_from_origin, time_from_origin = get_distance_and_time((org_lat, org_long), (dest_lat, dest_long))
-        distance_to_dest, time_to_dest = get_distance_and_time((cur_lat, cur_long), (dest_lat, dest_long))
-        reward -= (distance_to_dest / distance_from_origin) * 100
-        reward -= (1 / (cur_soc / max_soc)) * 10
+        distance_from_origin, time_from_origin = get_distance_and_time((self.org_lat, self.org_long), (self.dest_lat, self.dest_long))
 
-        # -50 for each timestep where it's not possible to reach the destination
-        time_to_dest /= 3600  # Convert to hours
-        if (usage_per_hour / 3600) * time_to_dest > cur_soc:
-            reward -= 50
+        reward -= (distance_to_dest / distance_from_origin) * 100
+        reward -= (1 / battery_percentage) * 50
 
         if self.cur_soc <= 0 and done:
             reward -= 2000
-        if self.cur_soc > 0 and done:
-            reward += 2000
 
         return reward
 
     # Reward = -distance - 1/SoC
     def reward2(self, state, done):
         reward = 0
-        make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
-        distance_to_dest, time_to_dest = get_distance_and_time((cur_lat, cur_long), (dest_lat, dest_long))
+        make, model, battery_percentage, distance_to_dest, *charger_distances = state
         reward -= distance_to_dest
-        reward -= 1 / cur_soc
+        reward -= 1 / battery_percentage
         return reward
 
 
@@ -302,7 +294,7 @@ class EVSimEnvironment:
         #  +100000 for getting to a step before reaching the destination
         #  +1 for each percentage closer to destination from origin
 
-        make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
+        make, model, battery_percentage, distance_to_dest, *charger_distances = state
         usage_per_hour, charge_per_hour = self.ev_info()
 
         reward = 0
@@ -365,11 +357,14 @@ class EVSimEnvironment:
         return usage_per_hour, charge_per_hour
 
     def update_state(self):
-        self.state = (self.make, self.model, self.cur_soc, self.max_soc, self.base_soc, self.cur_lat, self.cur_long,
-                      self.org_lat, self.org_long, self.dest_lat, self.dest_long, self.charger_coords)
 
-        unwrapped_values = sum(self.state[-1], ())
-        self.state = self.state[:-1] + unwrapped_values
+        charger_distances = []
+        for charger in self.charger_coords:
+            charger_distances.append(get_distance_and_time((self.cur_lat, self.cur_long), (charger[1], charger[2]))[0])
+
+        distance_to_dest = get_distance_and_time((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long))[0]
+
+        self.state = (self.make, self.model, self.cur_soc / self.max_soc, distance_to_dest, *charger_distances)
 
     def get_state_action_dimension(self):
         states = len(self.state)
