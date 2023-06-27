@@ -1,5 +1,4 @@
 import math
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,6 +9,7 @@ import os
 import time
 
 
+# Define the architecture of the neural network used to approximate the Q-function
 # Define the QNetwork architecture
 class QNetwork(nn.Module):
     def __init__(self, state_dim, action_dim, layers):
@@ -31,56 +31,65 @@ class QNetwork(nn.Module):
             x = torch.relu(self.layers[i](x))  # Apply ReLU activation to each layer except output
         return self.layers[-1](x)  # Output layer without activation
 
-# Define the experience tuple
+
+# Define a named tuple for storing experience tuples
 experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
 
 def initialize(state_dim, action_dim, layers):
-    """Initializes the Q and target-Q neural networks
-
-    Args:
-        state_dim: How many state variables are used
-        action_dim: How many actions can the system choose from
-        layers: Array of hidden layers and their sizes (e.g. [64, 128, 128, 64])
-
-    Returns:
-        q_network: Q network used for DQL
-        target_q_network: Target Q network used for DQL
-    """
-
-    q_network = QNetwork(state_dim, action_dim, layers)  # Q-network
-    target_q_network = QNetwork(state_dim, action_dim, layers)  # Target Q-network
-    target_q_network.load_state_dict(q_network.state_dict())  # Initialize target Q-network with the same weights as Q-network
+    # Initialize Q-network and target Q-network with the same weights
+    q_network = QNetwork(state_dim, action_dim, layers)
+    target_q_network = QNetwork(state_dim, action_dim, layers)
+    target_q_network.load_state_dict(q_network.state_dict())
     return q_network, target_q_network
 
-def compute_loss(experiences, gamma, q_network, target_q_network):
+def compute_loss(experiences, epsilon, q_network, target_q_network, action_dim, discount_factor):
     """Compute the loss of a given set of experiences
 
     Args:
         experiences: Set of tuples with the structure (state, action, reward, next_state, done)
-        gamma: Discount factor for DQL
-        q_network: Q network used for DQL
-        target_q_network: Target Q network used for DQL
+        epsilon: Probability of selecting a random action
+        q_network: Q network used for Sarsa
+        target_q_network: Target Q network used for Sarsa
+        action_dim: How many actions can the system choose from
 
     Returns:
-        loss: Integer value used to train the network
+        loss: Tensor value used to train the network
     """
 
     states, actions, rewards, next_states, dones = experiences
-    current_Q = q_network(states).gather(1, actions.unsqueeze(1))  # Q-value from Q-network
-    next_Q = target_q_network(next_states).detach().max(1)[0].unsqueeze(1)  # Maximum Q-value from target Q-network
-    target_Q = rewards + (gamma * next_Q * (1 - dones))  # Target Q-value
-    loss = nn.MSELoss()(current_Q, target_Q)  # Compute MSE loss
+
+    # Compute current Q values
+    current_Q = q_network(states).gather(1, actions.unsqueeze(1))
+
+    # Compute next action probabilities
+    action_probabilities = torch.ones((next_states.shape[0], action_dim)) * epsilon / action_dim
+    best_action = q_network(next_states).argmax(dim=1).unsqueeze(1)
+    action_probabilities.scatter_(1, best_action, 1 - epsilon + epsilon / action_dim)
+
+    # Compute expected Q values
+    next_Q = target_q_network(next_states)
+    expected_next_Q = torch.sum(next_Q * action_probabilities, dim=1).unsqueeze(1)
+
+    # Compute target Q values
+    target_Q = rewards + (discount_factor * expected_next_Q * (1 - dones))
+
+    # Compute loss
+    loss = nn.MSELoss()(current_Q, target_Q)
+
     return loss
 
-def agent_learn(experiences, gamma, q_network, target_q_network, optimizer):
+
+
+def agent_learn(experiences, epsilon, q_network, target_q_network, optimizer, action_dim, discount_factor):
     """Implement agent learning functionality
 
     Args:
         experiences: Set of tuples with the structure (state, action, reward, next_state, done)
-        gamma: Discount factor for DQL
-        q_network: Q network used for DQL
-        target_q_network: Target Q network used for DQL
+        epsilon: Probability of selecting a random action
+        q_network: Q network used for Sarsa
+        target_q_network: Target Q network used for Sarsa
         optimizer: Optimizer to use for training
+        action_dim: How many actions can the system choose from
 
     Returns:
         Nothing
@@ -95,12 +104,13 @@ def agent_learn(experiences, gamma, q_network, target_q_network, optimizer):
     dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1)
     experiences = (states, actions, rewards, next_states, dones)
 
-    loss = compute_loss(experiences, gamma, q_network, target_q_network)  # Compute loss
+    loss = compute_loss(experiences, epsilon, q_network, target_q_network, action_dim, discount_factor)  # Compute loss
     optimizer.zero_grad()  # Zero out gradients
     loss.backward()  # Backpropagate loss
     optimizer.step()  # Update weights
 
-def train_dqn(
+
+def train_sarsa(
         environment,
         epsilon,
         discount_factor,
@@ -131,63 +141,72 @@ def train_dqn(
     Returns:
         Nothing
     """
+
     environment.tracking_baseline = False
-    q_network, target_q_network = initialize(state_dim, action_dim, layers)  # Initialize networks
+    q_network, target_q_network = initialize(state_dim, action_dim, layers)
 
     if load_saved:
-        # Save the networks at the end of the episode
+        # Load saved weights if requested
         load_model(q_network, 'saved_networks/q_network.pth')
         load_model(target_q_network, 'saved_networks/target_q_network.pth')
 
-    optimizer = optim.Adam(q_network.parameters())  # Initialize optimizer
-    buffer = []  # Initialize replay buffer
+    # Initialize the optimizer and the replay buffer
+    optimizer = optim.Adam(q_network.parameters())
+    buffer = []
 
     start_time = time.time()
 
-    for i in range(num_episodes + 1):  # For each episode
-        state = environment.reset()  # Reset environment
+    for i in range(num_episodes + 1):
+        state = environment.reset()
 
-        # Log every tenth episode
         if i % 10 == 0:
+            # Print progress every 10 episodes
             elapsed_time = time.time() - start_time
             print(f"Episode: {i} - {int(elapsed_time // 3600)}h, {int((elapsed_time % 3600) // 60)}m, {int(elapsed_time % 60)}s")
 
         for j in range(max_num_timesteps):  # For each timestep
-            state = torch.tensor(state, dtype=torch.float32)  # Convert state to tensor
-            if np.random.rand() < epsilon:  # Epsilon-greedy action selection
-                action = np.random.choice(action_dim)  # Random action
-            else:
-                action = q_network(state).argmax().item()  # Greedy action
+            # Convert the state to a tensor
+            state = torch.tensor(state, dtype=torch.float32)
 
-            next_state, reward, done = environment.step(action)  # Execute action
-            buffer.append(experience(state, action, reward, next_state, done))  # Store experience
+            # Choose an action using the epsilon-greedy policy
+            if np.random.rand() < epsilon:
+                action = np.random.choice(action_dim)
+            else:
+                action = q_network(state).argmax().item()
+
+            # Execute the action and store the result in the replay buffer
+            next_state, reward, done = environment.step(action)
+            buffer.append(experience(state, action, reward, next_state, done))
 
             if len(buffer) >= buffer_limit:  # If replay buffer is full enough
                 mini_batch = random.sample(buffer, batch_size)  # Sample a mini-batch
                 experiences = map(np.stack, zip(*mini_batch))  # Format experiences
-                agent_learn(experiences, discount_factor, q_network, target_q_network, optimizer)  # Update networks
+                agent_learn(experiences, epsilon, q_network, target_q_network, optimizer, action_dim, discount_factor)  # Update networks
 
-            if done:  # If episode is done
+            if done:
                 break
-            state = next_state  # Update state
+            state = next_state
 
-        epsilon *= discount_factor  # Decay epsilon
+        # Decay the epsilon value after each episode
+        epsilon *= discount_factor
 
-        if i % 10 == 0:  # Every ten episodes
-            target_q_network.load_state_dict(q_network.state_dict())  # Update target network
+        if i % 10 == 0:
+            # Update the target Q-network every 10 episodes
+            target_q_network.load_state_dict(q_network.state_dict())
 
-            # Add this before you save your model
             if not os.path.exists('saved_networks'):
                 os.makedirs('saved_networks')
 
-            # Save the networks at the end of training
+            # Save the Q-network and the target Q-network
             save_model(q_network, 'saved_networks/q_network.pth')
             save_model(target_q_network, 'saved_networks/target_q_network.pth')
 
-    environment.reset()  # Reset environment
+    environment.reset()
 
 def save_model(network, filename):
+    # Save the weights of a network
     torch.save(network.state_dict(), filename)
 
 def load_model(network, filename):
+    # Load the weights into a network
     network.load_state_dict(torch.load(filename))

@@ -1,4 +1,5 @@
-from dqn_custom import train
+from dqn_custom import train_dqn
+from sarsa_custom import train_sarsa
 from ev_simulation_environment import EVSimEnvironment
 from geolocation.visualize import generate_interactive_plot, read_csv_data, generate_average_reward_plot, generate_charger_only_plot
 from baseline_algorithm import baseline
@@ -6,6 +7,8 @@ import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 ############
+
+algorithm = "SARSA"
 
 train_model = True
 generate_baseline = True
@@ -36,13 +39,19 @@ if generate_baseline:
 if train_model:
     epsilon = 0.60
     discount_factor = 0.9999
-    batch_size = 10
-    buffer_limit = 25
+    batch_size = 50
+    buffer_limit = 125
     max_num_timesteps = 50
     layers = [32, 32, 32]
 
     state_dimension, action_dimension = env.get_state_action_dimension()
-    train(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
+
+    if algorithm == "DQN":
+        print("Training using Deep-Q Learning")
+        train_dqn(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
+    else:
+        print("Training using Expected SARSA")
+        train_sarsa(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
 
 if save_data:
     env.write_path_to_csv('outputs/routes.csv')
@@ -59,6 +68,6 @@ if generate_plots:
         route_datasets.append(group)
 
     if train_model or start_from_previous_session:
-        generate_average_reward_plot(reward_data)
+        generate_average_reward_plot(reward_data, algorithm)
 
-    generate_interactive_plot(route_datasets, charger_data, (org_lat, org_long), (dest_lat, dest_long))
+    generate_interactive_plot(algorithm, route_datasets, charger_data, (org_lat, org_long), (dest_lat, dest_long))
