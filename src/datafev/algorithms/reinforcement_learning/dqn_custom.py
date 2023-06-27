@@ -131,7 +131,7 @@ def train(
     Returns:
         Nothing
     """
-
+    environment.tracking_baseline = False
     q_network, target_q_network = initialize(state_dim, action_dim, layers)  # Initialize networks
 
     if load_saved:
@@ -144,7 +144,7 @@ def train(
 
     start_time = time.time()
 
-    for i in range(num_episodes):  # For each episode
+    for i in range(num_episodes + 1):  # For each episode
         state = environment.reset()  # Reset environment
 
         # Log every tenth episode

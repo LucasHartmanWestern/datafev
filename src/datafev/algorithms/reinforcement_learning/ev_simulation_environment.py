@@ -45,6 +45,8 @@ class EVSimEnvironment:
             Environment to use for EV simulations
         """
 
+        self.tracking_baseline = False
+
         self.num_of_episodes = num_of_episodes
         self.episode_num = -1
         self.visited_list = []
@@ -120,13 +122,9 @@ class EVSimEnvironment:
 
         self.step_num += 1
 
-        # Log every tenth episode
-        if self.episode_num % math.ceil(self.num_of_episodes / 10) == 0:
-            self.log(action)
-
         current_state = copy.copy(self.state)
         done = False
-        if self.is_charging == False:
+        if self.is_charging is not True:
             # Consume battery while driving
             self.cur_soc -= self.usage_per_hour / (4 * 60)
             if action == 0:
@@ -137,16 +135,17 @@ class EVSimEnvironment:
                 # Start charging EV if within 15 minutes of charging station
                 if time_to_destination <= 15 / 60:
                     done = True
-                    if self.episode_num % math.ceil(self.num_of_episodes / 10) == 0:
-                        self.log(action, True)
             else:
-                # Drive 15 minutes towards selected destination
-                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]), 15)
                 # Find how far station is away from current coordinates in minutes
                 time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]))[1] / 60
                 # Start charging EV if within 15 minutes of charging station
                 if time_to_station <= 15 / 60:
+                    # Arrive at charging station
+                    self.cur_lat, self.cur_long = (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2])
                     self.is_charging = True
+                else:
+                    # Drive 15 minutes towards selected destination
+                    self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]), 15)
 
             if self.cur_soc <= 0:
                 done = True
@@ -172,12 +171,25 @@ class EVSimEnvironment:
 
         self.episode_reward += reward
 
+        # Log every tenth episode
+        if self.episode_num % math.ceil(self.num_of_episodes / 10) == 0 or self.tracking_baseline:
+            time_to_destination = get_distance_and_time((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long))[1] / 60
+            if time_to_destination <= 15 / 60 and done:
+                self.log(action, True)
+            else:
+                self.log(action)
+
         return self.state, reward, done
 
-    def log(self, action, final = False):
+    def log(self, action, final = False, episode_offset = 0):
         new_row = []
-        new_row.append(self.episode_num)
-        if action == 0:
+        if self.tracking_baseline:
+            new_row.append('Baseline')
+        else:
+            new_row.append(self.episode_num + episode_offset)
+        if action == -1:
+            new_row.append(' ')
+        elif action == 0:
             new_row.append(action)
         else:
             new_row.append(self.charger_coords[action - 1][0])
@@ -185,14 +197,15 @@ class EVSimEnvironment:
         new_row.append(round(self.cur_soc / 1000, 2))
         new_row.append(self.is_charging)
         new_row.append(round(self.episode_reward, 2))
-        if final == False:
+        if final is not True:
             new_row.append(self.cur_lat)
             new_row.append(self.cur_long)
         else:
             new_row.append(self.dest_lat)
             new_row.append(self.dest_long)
 
-        self.current_path.append(new_row)
+        if self.tracking_baseline is not True:
+            self.current_path.append(new_row)
         self.visited_list.append(new_row)
 
     def get_charger_list(self):
@@ -208,7 +221,6 @@ class EVSimEnvironment:
         self.get_charger_list()
 
         if self.episode_num != -1: # Ignore initial reset
-            self.episode_reward /= self.step_num # Average reward among steps
 
             if self.episode_reward > self.max_reward and len(self.current_path) != 0:
                 self.best_path = self.current_path.copy() # Track best path
@@ -231,7 +243,12 @@ class EVSimEnvironment:
 
         self.current_path = []
 
-        self.episode_num += 1
+        if self.tracking_baseline is not True:
+            self.episode_num += 1
+
+        if self.episode_num >= 0 or self.tracking_baseline:
+            if (self.episode_num <= self.num_of_episodes and self.episode_num % math.ceil(self.num_of_episodes / 10) == 0) or self.tracking_baseline:
+                self.log(-1, False, 0)
 
         # Update state
         self.update_state()
@@ -242,10 +259,23 @@ class EVSimEnvironment:
     def reward3(self, state, done):
         reward = 0
         make, model, cur_soc, max_soc, base_soc, cur_lat, cur_long, org_lat, org_long, dest_lat, dest_long, *_ = state
+        usage_per_hour, charge_per_hour = self.ev_info()
+
         distance_from_origin, time_from_origin = get_distance_and_time((org_lat, org_long), (dest_lat, dest_long))
         distance_to_dest, time_to_dest = get_distance_and_time((cur_lat, cur_long), (dest_lat, dest_long))
         reward -= (distance_to_dest / distance_from_origin) * 100
         reward -= (1 / (cur_soc / max_soc)) * 10
+
+        # -50 for each timestep where it's not possible to reach the destination
+        time_to_dest /= 3600  # Convert to hours
+        if (usage_per_hour / 3600) * time_to_dest > cur_soc:
+            reward -= 50
+
+        if self.cur_soc <= 0 and done:
+            reward -= 2000
+        if self.cur_soc > 0 and done:
+            reward += 2000
+
         return reward
 
     # Reward = -distance - 1/SoC
@@ -286,7 +316,7 @@ class EVSimEnvironment:
             if usage_per_hour * time_to_station < cur_soc:
                 reward += 1
 
-        if self.is_charging and self.prev_charging == False and cur_soc / max_soc < 0.2:
+        if self.is_charging and self.prev_charging is not True and cur_soc / max_soc < 0.2:
             reward += 25
 
         if self.is_charging and self.prev_charging and cur_soc / max_soc < 0.8:
@@ -364,7 +394,6 @@ class EVSimEnvironment:
             for row in self.visited_list:
                 writer.writerow(row)
 
-            print(f'Best {self.best_path}')
             for row in self.best_path:
                 row[0] = "Best"
                 writer.writerow(row)
