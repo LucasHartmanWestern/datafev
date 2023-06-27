@@ -22,7 +22,7 @@ org_lat = 42.98904084
 org_long = -81.22821493
 dest_lat = 43.006137960450104
 dest_long = -81.27651959525788
-num_episodes = 5000
+num_episodes = 10000
 
 max_attempts = 10
 
@@ -32,13 +32,13 @@ if generate_baseline:
     baseline(env, max_attempts)
 
 if train_model:
-    epsilon = 0.05
-    discount_factor = 0.999
+    epsilon = 0.20
+    discount_factor = 0.9999
     batch_size = 100
     buffer_limit = 250
     max_num_timesteps = 50
     start_from_previous_session = True
-    layers = [64, 128, 526, 128, 64]
+    layers = [64, 128, 1024, 1024, 512, 128, 64]
 
     state_dimension, action_dimension = env.get_state_action_dimension()
     train(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
