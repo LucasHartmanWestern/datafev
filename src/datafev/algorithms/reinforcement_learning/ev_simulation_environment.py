@@ -2,6 +2,9 @@ import copy
 import csv
 import math
 import json
+import random
+
+import numpy as np
 import pandas as pd
 
 from collections import OrderedDict
@@ -102,8 +105,9 @@ class EVSimEnvironment:
             charger_id = station['id']
             charger_lat = station['latitude']
             charger_long = station['longitude']
-            charger_data.append([charger_id, charger_lat, charger_long])
-        self.charger_info = pd.DataFrame(charger_data, columns=['id', 'latitude', 'longitude'])
+            traffic = random.randint(1, 10)
+            charger_data.append([charger_id, charger_lat, charger_long, traffic])
+        self.charger_info = pd.DataFrame(charger_data, columns=['id', 'latitude', 'longitude', 'traffic'])
 
         self.charger_lat = self.charger_info.iloc[:, 1].tolist()  # Extract values from the 3rd column
         self.charger_long = self.charger_info.iloc[:, 2].tolist()  # Extract values from the 4th column
@@ -115,7 +119,10 @@ class EVSimEnvironment:
 
         self.step_num += 1
 
-        # TODO - Simulate SoC
+        # TODO - Update traffic at stations
+        self.calculate_traffic()
+
+        # Simulate SoC
         self.calculate_charge(action)
 
         # Simulate movement
@@ -135,6 +142,16 @@ class EVSimEnvironment:
 
         return self.state, reward, done
 
+    def calculate_traffic(self):
+        for station in self.charger_info:
+            random_sample = np.random.normal(0, 2.5, 100)
+
+            # Clip the random sample to ensure values are within the desired range (-5 to 5)
+            random_sample = np.clip(random_sample, -5, 5)
+
+            # Randomly increase or decrease traffic
+            station['traffic'] += round(np.mean(random_sample))
+
     def calculate_charge(self, action):
         # Find how far station is away from current coordinates in minutes
         time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (
@@ -143,10 +160,12 @@ class EVSimEnvironment:
         if time_to_station <= 15 / 60:
             self.is_charging = True
 
-        if self.is_charging is not True:
+        if self.charger_info[action - 1]['traffic'] >= 10:
+            # Car is at station waiting to charge
+            self.is_charging = False
+        elif self.is_charging is not True and self.charger_info[action - 1]['traffic'] < 10:
             # Consume battery while driving
             self.cur_soc -= self.usage_per_hour / 4
-
         else:
             # Increase battery while charging
             self.cur_soc += self.charge_per_hour / 4

@@ -124,7 +124,8 @@ def train_sarsa(
         state_dim,
         action_dim,
         load_saved=False,
-        layers=[64, 128, 1024, 128, 64]
+        layers=[64, 128, 1024, 128, 64],
+        baseline=None
 ):
     """Main training loop
 
@@ -157,6 +158,10 @@ def train_sarsa(
     optimizer = optim.Adam(q_network.parameters())
     buffer = []
 
+    if baseline is not None:
+        for exp in baseline:
+            buffer.append(experience(exp[0], exp[1], exp[2], exp[3], exp[4]))
+
     start_time = time.time()
 
     for i in range(num_episodes + 1):
@@ -179,6 +184,7 @@ def train_sarsa(
 
             # Execute the action and store the result in the replay buffer
             next_state, reward, done = environment.step(action)
+
             buffer.append(experience(state, action, reward, next_state, done))
 
             if len(buffer) >= buffer_limit:  # If replay buffer is full enough
