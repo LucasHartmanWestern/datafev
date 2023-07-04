@@ -62,13 +62,16 @@ def compute_loss(experiences, epsilon, q_network, target_q_network, action_dim, 
     current_Q = q_network(states).gather(1, actions.unsqueeze(1))
 
     # Compute next action probabilities
-    action_probabilities = torch.ones((next_states.shape[0], action_dim)) * epsilon / action_dim
-    best_action = q_network(next_states).argmax(dim=1).unsqueeze(1)
-    action_probabilities.scatter_(1, best_action, 1 - epsilon + epsilon / action_dim)
+    next_actions = torch.zeros((next_states.shape[0], action_dim), dtype=torch.float32)
+    next_actions.fill_(epsilon / action_dim)
+
+    next_best_action = q_network(next_states).argmax(dim=1)
+    for i in range(next_states.shape[0]):
+        next_actions[i, next_best_action[i]] = 1 - epsilon + epsilon / action_dim
 
     # Compute expected Q values
     next_Q = target_q_network(next_states)
-    expected_next_Q = torch.sum(next_Q * action_probabilities, dim=1).unsqueeze(1)
+    expected_next_Q = (next_actions * next_Q).sum(dim=1).unsqueeze(1)
 
     # Compute target Q values
     target_Q = rewards + (discount_factor * expected_next_Q * (1 - dones))
