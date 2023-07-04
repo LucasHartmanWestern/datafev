@@ -27,7 +27,7 @@ org_lat = 42.98904084
 org_long = -81.22821493
 dest_lat = 43.006137960450104
 dest_long = -81.27651959525788
-num_episodes = 1000
+num_episodes = 500
 
 max_attempts = 10
 
@@ -68,6 +68,6 @@ if generate_plots:
         route_datasets.append(group)
 
     if train_model or start_from_previous_session:
-        generate_average_reward_plot(reward_data, algorithm)
+        generate_average_reward_plot(algorithm, reward_data)
 
     generate_interactive_plot(algorithm, route_datasets, charger_data, (org_lat, org_long), (dest_lat, dest_long))

@@ -108,64 +108,18 @@ class EVSimEnvironment:
         self.charger_lat = self.charger_info.iloc[:, 1].tolist()  # Extract values from the 3rd column
         self.charger_long = self.charger_info.iloc[:, 2].tolist()  # Extract values from the 4th column
 
+
     def step(self, action):
-        """Simulate a step in the EVs travel
-
-        Args:
-            action: Number to use as index for stations list
-
-        Returns:
-            next_state: New state of the system
-            reward: Reward for current state
-            done: Indicator for if simulation is done
-        """
+        # Copy of current state before step
+        current_state = copy.copy(self.state)
 
         self.step_num += 1
 
-        current_state = copy.copy(self.state)
-        done = False
-        if self.is_charging is not True:
-            # Consume battery while driving
-            self.cur_soc -= self.usage_per_hour / (4 * 60)
-            if action == 0:
-                # Drive 15 minutes towards selected destination
-                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15)
-                # Find how far destination is away from current coordinates in minutes
-                time_to_destination = get_distance_and_time((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long))[1] / 60
-                # Start charging EV if within 15 minutes of charging station
-                if time_to_destination <= 15 / 60:
-                    done = True
-            else:
-                # Find how far station is away from current coordinates in minutes
-                time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]))[1] / 60
-                # Start charging EV if within 15 minutes of charging station
-                if time_to_station <= 15 / 60:
-                    # Arrive at charging station
-                    self.cur_lat, self.cur_long = (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2])
-                    self.is_charging = True
-                else:
-                    # Drive 15 minutes towards selected destination
-                    self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]), 15)
+        # TODO - Simulate SoC
+        self.calculate_charge(action)
 
-            if self.cur_soc <= 0:
-                done = True
-        else:
-            # Increase battery while charging
-            self.cur_soc += self.charge_per_hour / (4 * 60)
-            if self.cur_soc > self.max_soc: self.cur_soc = self.max_soc
-            if action != 0:
-                time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]))[1] / 60
-
-            if action == 0 or self.cur_soc >= self.max_soc or time_to_station > 15 / 60:
-                self.is_charging = False
-                self.prev_charging = False
-                # Drive 15 minutes towards selected destination
-                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15)
-            else:
-                self.prev_charging = True
-
-        # Update state
-        self.update_state()
+        # Simulate movement
+        next_state, done = self.move(action)
 
         reward = self.reward3(current_state, done)
 
@@ -180,6 +134,69 @@ class EVSimEnvironment:
                 self.log(action)
 
         return self.state, reward, done
+
+    def calculate_charge(self, action):
+        # Find how far station is away from current coordinates in minutes
+        time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (
+            self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]))[1] / 60
+        # Start charging EV if within 15 minutes of charging station
+        if time_to_station <= 15 / 60:
+            self.is_charging = True
+
+        if self.is_charging is not True:
+            # Consume battery while driving
+            self.cur_soc -= self.usage_per_hour / 4
+
+        else:
+            # Increase battery while charging
+            self.cur_soc += self.charge_per_hour / 4
+            if self.cur_soc > self.max_soc:
+                self.cur_soc = self.max_soc
+
+            if action == 0 or self.cur_soc >= self.max_soc or time_to_station > 15 / 60:
+                self.is_charging = False
+
+    def move(self, action):
+        """Simulate a step in the EVs travel
+
+        Args:
+            action: Number to use as index for stations list
+
+        Returns:
+            next_state: New state of the system
+            reward: Reward for current state
+            done: Indicator for if simulation is done
+        """
+
+        done = False
+        if action == 0:
+            # Drive 15 minutes towards selected destination
+            self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long), 15)
+            # Find how far destination is away from current coordinates in minutes
+            time_to_destination = get_distance_and_time((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long))[1] / 60
+            # Start charging EV if within 15 minutes of charging station
+            if time_to_destination <= 15 / 60:
+                done = True
+        else:
+            # Find how far station is away from current coordinates in minutes
+            time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (
+                self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]))[1] / 60
+            # Start charging EV if within 15 minutes of charging station
+            if time_to_station <= 15 / 60:
+                # Arrive at charging station
+                self.cur_lat, self.cur_long = (self.charger_coords[action - 1][1], self.charger_coords[action - 1][2])
+            else:
+                # Drive 15 minutes towards selected destination
+                self.cur_lat, self.cur_long = move_towards((self.cur_lat, self.cur_long), (
+                    self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]), 15)
+
+        if self.cur_soc <= 0:
+            done = True
+
+        # Update state
+        self.update_state()
+
+        return self.state, done
 
     def log(self, action, final = False, episode_offset = 0):
         new_row = []
@@ -240,6 +257,7 @@ class EVSimEnvironment:
         self.cur_soc = self.base_soc
         self.cur_lat = self.org_lat
         self.cur_long = self.org_long
+        self.is_charging = False
 
         self.current_path = []
 
@@ -352,8 +370,8 @@ class EVSimEnvironment:
     # TODO - Get EV Info
     def ev_info(self):
         # TODO - Make estimates more realistic using LH Dataset
-        usage_per_hour = 15600 * 60 # Average usage per hour of Tesla
-        charge_per_hour = 12500 * 60 # Average charge per hour of Tesla
+        usage_per_hour = 15600 # Average usage per hour of Tesla
+        charge_per_hour = 12500 # Average charge per hour of Tesla
         return usage_per_hour, charge_per_hour
 
     def update_state(self):

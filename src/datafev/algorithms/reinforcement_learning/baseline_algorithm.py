@@ -26,14 +26,14 @@ def baseline(environment, max_attempts):
     # Keep travelling to chargers or destination if you can get to it
     while done is not True and attempts < max_attempts:
         attempts += 1
-        max_distance = environment.cur_soc / (usage_per_hour / 3600)
+        max_distance = environment.cur_soc / (usage_per_hour / 60)
 
         done = check_done(environment, max_distance)
 
         if done is not True:
             current_best = find_best_charger(environment, max_distance)
             # How much to charge
-            target_soc = (usage_per_hour / 3600) * current_best[2]
+            target_soc = (usage_per_hour / 60) * current_best[2]
 
             # Go to the charger
             while environment.is_charging is not True and done is not True:
