@@ -101,7 +101,6 @@ def agent_learn(experiences, gamma, q_network, target_q_network, optimizer):
     optimizer.step()  # Update weights
 
 def train_dqn(
-        use_simple,
         environment,
         epsilon,
         discount_factor,
@@ -160,10 +159,7 @@ def train_dqn(
             else:
                 action = q_network(state).argmax().item()  # Greedy action
 
-            if use_simple:
-                next_state, reward, done = environment.simpleStep(action)  # Execute action
-            else:
-                next_state, reward, done = environment.step(action)  # Execute action
+            next_state, reward, done = environment.step(action)  # Execute action
             buffer.append(experience(state, action, reward, next_state, done))  # Store experience
 
             if len(buffer) >= buffer_limit:  # If replay buffer is full enough

@@ -111,7 +111,6 @@ def agent_learn(experiences, epsilon, q_network, target_q_network, optimizer, ac
 
 
 def train_sarsa(
-        use_simple,
         environment,
         epsilon,
         discount_factor,
@@ -176,10 +175,7 @@ def train_sarsa(
                 action = q_network(state).argmax().item()
 
             # Execute the action and store the result in the replay buffer
-            if use_simple:
-                next_state, reward, done = environment.simpleStep(action)
-            else:
-                next_state, reward, done = environment.step(action)
+            next_state, reward, done = environment.step(action)
             buffer.append(experience(state, action, reward, next_state, done))
 
             if len(buffer) >= buffer_limit:  # If replay buffer is full enough

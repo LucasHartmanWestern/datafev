@@ -11,11 +11,10 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 algorithm = "SARSA"
 
 train_model = True
-generate_baseline = False
-start_from_previous_session = False
+generate_baseline = True
+start_from_previous_session = True
 save_data = True
 generate_plots = True
-use_simple = True
 
 ############
 
@@ -28,31 +27,31 @@ org_lat = 42.98904084
 org_long = -81.22821493
 dest_lat = 43.006137960450104
 dest_long = -81.27651959525788
-max_num_timesteps = 20
-num_episodes = 5000
+num_episodes = 1000
 
 max_attempts = 10
 
 env = EVSimEnvironment(num_episodes, num_of_chargers, make, model, starting_charge, max_charge, org_lat, org_long, dest_lat, dest_long)
 
 if generate_baseline:
-    baseline(use_simple, env, max_attempts, max_num_timesteps)
+    baseline(env, max_attempts)
 
 if train_model:
-    epsilon = 0.6
-    discount_factor = 0.99999
-    batch_size = 150
-    buffer_limit = 250
-    layers = [32, 64, 32, 32]
+    epsilon = 0.60
+    discount_factor = 0.9999
+    batch_size = 50
+    buffer_limit = 125
+    max_num_timesteps = 50
+    layers = [32, 32, 32]
 
     state_dimension, action_dimension = env.get_state_action_dimension()
 
     if algorithm == "DQN":
         print("Training using Deep-Q Learning")
-        train_dqn(use_simple, env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
+        train_dqn(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
     else:
         print("Training using Expected SARSA")
-        train_sarsa(use_simple, env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
+        train_sarsa(env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
 
 if save_data:
     env.write_path_to_csv('outputs/routes.csv')
@@ -69,6 +68,6 @@ if generate_plots:
         route_datasets.append(group)
 
     if train_model or start_from_previous_session:
-        generate_average_reward_plot(algorithm, reward_data)
+        generate_average_reward_plot(reward_data, algorithm)
 
     generate_interactive_plot(algorithm, route_datasets, charger_data, (org_lat, org_long), (dest_lat, dest_long))
