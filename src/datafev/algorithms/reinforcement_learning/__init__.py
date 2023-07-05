@@ -2,7 +2,7 @@ from dqn_custom import train_dqn
 from sarsa_custom import train_sarsa
 from ev_simulation_environment import EVSimEnvironment
 from geolocation.visualize import generate_interactive_plot, read_csv_data, generate_average_reward_plot, generate_charger_only_plot
-from baseline_algorithm import BaselineGenerator
+from baseline_algorithm import baseline
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
@@ -34,29 +34,25 @@ num_episodes = 5000
 max_attempts = 10
 
 env = EVSimEnvironment(num_episodes, num_of_chargers, make, model, starting_charge, max_charge, org_lat, org_long, dest_lat, dest_long)
-baselineGen = BaselineGenerator()
 
-generated_baseline = None
 if generate_baseline:
-    baselineGen.generate_baseline(use_simple, env, max_attempts, max_num_timesteps)
-    generated_baseline = baselineGen.path
+    baseline(use_simple, env, max_attempts, max_num_timesteps)
 
 if train_model:
-    epsilon = 0.60
+    epsilon = 0.6
     discount_factor = 0.99999
-    batch_size = 50
-    buffer_limit = 125
-    max_num_timesteps = 50
-    layers = [32, 64, 64, 32]
+    batch_size = 150
+    buffer_limit = 250
+    layers = [32, 64, 32, 32]
 
     state_dimension, action_dimension = env.get_state_action_dimension()
 
     if algorithm == "DQN":
         print("Training using Deep-Q Learning")
-        train_dqn(use_simple, env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers, generated_baseline)
+        train_dqn(use_simple, env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
     else:
         print("Training using Expected SARSA")
-        train_sarsa(use_simple, env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers, generated_baseline)
+        train_sarsa(use_simple, env, epsilon, discount_factor, num_episodes, batch_size, buffer_limit, max_num_timesteps, state_dimension, action_dimension - 1, start_from_previous_session, layers)
 
 if save_data:
     env.write_path_to_csv('outputs/routes.csv')

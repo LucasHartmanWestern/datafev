@@ -112,8 +112,7 @@ def train_dqn(
         state_dim,
         action_dim,
         load_saved=False,
-        layers=[64, 128, 1024, 128, 64],
-        baseline=None
+        layers=[64, 128, 1024, 128, 64]
 ):
     """Main training loop
 
@@ -143,10 +142,6 @@ def train_dqn(
 
     optimizer = optim.Adam(q_network.parameters())  # Initialize optimizer
     buffer = []  # Initialize replay buffer
-
-    if baseline is not None:
-        for exp in baseline:
-            buffer.append(experience(exp[0], exp[1], exp[2], exp[3], exp[4]))
 
     start_time = time.time()
 
