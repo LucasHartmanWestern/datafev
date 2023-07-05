@@ -65,15 +65,15 @@ def generate_interactive_plot(algorithm, routes, chargers, origin, destination):
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
-        x=[origin[0]],
-        y=[origin[1]],
+        x=[origin[1]],
+        y=[origin[0]],
         mode='markers',
         name='Origin',
         marker=dict(symbol='triangle-up', size=10)
     ))
     fig.add_trace(go.Scatter(
-        x=[destination[0]],
-        y=[destination[1]],
+        x=[destination[1]],
+        y=[destination[0]],
         mode='markers',
         name='Destination',
         marker=dict(symbol='triangle-down', size=10)
@@ -84,8 +84,8 @@ def generate_interactive_plot(algorithm, routes, chargers, origin, destination):
 
         # Plot the path
         fig.add_trace(go.Scatter(
-            x=route['Latitude'],
-            y=route['Longitude'],
+            x=route['Longitude'],
+            y=route['Latitude'],
             mode='markers+lines',
             name=name,
             legendgroup=name,
@@ -96,8 +96,8 @@ def generate_interactive_plot(algorithm, routes, chargers, origin, destination):
 
         # Plot the last point with a different marker
         fig.add_trace(go.Scatter(
-            x=[route['Latitude'].iloc[-1]],
-            y=[route['Longitude'].iloc[-1]],
+            x=[route['Longitude'].iloc[-1]],
+            y=[route['Latitude'].iloc[-1]],
             mode='markers',
             name=f'End {name}',
             marker=dict(symbol='star', size=10),
@@ -110,8 +110,8 @@ def generate_interactive_plot(algorithm, routes, chargers, origin, destination):
 
     for i in range(len(chargers)):
         fig.add_trace(go.Scatter(
-            x=[chargers.iloc[i][1]],
-            y=[chargers.iloc[i][2]],
+            x=[chargers.iloc[i][2]],
+            y=[chargers.iloc[i][1]],
             mode='markers',
             name=f'Charger {int(chargers.iloc[i][0])}'
         ))
@@ -119,12 +119,12 @@ def generate_interactive_plot(algorithm, routes, chargers, origin, destination):
 
     fig.update_layout(
         title=f'{algorithm} Path Visualization',
-        xaxis_title='Latitude',
-        yaxis_title='Longitude',
+        xaxis_title='Longitude',
+        yaxis_title='Latitude',
         annotations=[
             dict(
-                x=origin[0],
-                y=origin[1],
+                x=origin[1],
+                y=origin[0],
                 xref="x",
                 yref="y",
                 text="Origin",
@@ -134,8 +134,8 @@ def generate_interactive_plot(algorithm, routes, chargers, origin, destination):
                 ay=-40
             ),
             dict(
-                x=destination[0],
-                y=destination[1],
+                x=destination[1],
+                y=destination[0],
                 xref="x",
                 yref="y",
                 text="Destination",

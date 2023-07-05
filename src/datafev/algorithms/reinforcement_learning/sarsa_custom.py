@@ -3,57 +3,64 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from collections import namedtuple
-import random
 import os
 import time
+from collections import namedtuple
+import random
 
 
-# Define the architecture of the neural network used to approximate the Q-function
-# Define the QNetwork architecture
+# Define a named tuple for storing experience tuples
+Experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
+
+
 class QNetwork(nn.Module):
+    """
+    Neural Network used to approximate the Q-function.
+
+    This class defines the architecture of the neural network
+    used to approximate the Q-function in reinforcement learning.
+    """
+
     def __init__(self, state_dim, action_dim, layers):
         super(QNetwork, self).__init__()
 
         # Create a ModuleList to hold the layers
         self.layers = nn.ModuleList()
+
+        # Add input layer and hidden layers to network
         for i, layer_size in enumerate(layers):
             if i == 0:
                 self.layers.append(nn.Linear(state_dim, layer_size))  # First layer
             else:
                 self.layers.append(nn.Linear(layers[i - 1], layer_size))  # Hidden layers
 
+        # Add output layer to network
         self.layers.append(nn.Linear(layers[-1], action_dim))  # Output layer
 
     def forward(self, state):
         x = state
         for i in range(len(self.layers) - 1):
             x = torch.relu(self.layers[i](x))  # Apply ReLU activation to each layer except output
-        return self.layers[-1](x)  # Output layer without activation
+
+        # Output layer without activation
+        return self.layers[-1](x)
 
 
-# Define a named tuple for storing experience tuples
-experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
+def initialize_networks(state_dim, action_dim, layers):
+    """
+    Initialize Q-network and target Q-network with the same weights
+    """
 
-def initialize(state_dim, action_dim, layers):
-    # Initialize Q-network and target Q-network with the same weights
     q_network = QNetwork(state_dim, action_dim, layers)
     target_q_network = QNetwork(state_dim, action_dim, layers)
     target_q_network.load_state_dict(q_network.state_dict())
+
     return q_network, target_q_network
 
+
 def compute_loss(experiences, epsilon, q_network, target_q_network, action_dim, discount_factor):
-    """Compute the loss of a given set of experiences
-
-    Args:
-        experiences: Set of tuples with the structure (state, action, reward, next_state, done)
-        epsilon: Probability of selecting a random action
-        q_network: Q network used for Sarsa
-        target_q_network: Target Q network used for Sarsa
-        action_dim: How many actions can the system choose from
-
-    Returns:
-        loss: Tensor value used to train the network
+    """
+    Compute the loss of a given set of experiences
     """
 
     states, actions, rewards, next_states, dones = experiences
@@ -79,20 +86,9 @@ def compute_loss(experiences, epsilon, q_network, target_q_network, action_dim, 
     return loss
 
 
-
 def agent_learn(experiences, epsilon, q_network, target_q_network, optimizer, action_dim, discount_factor):
-    """Implement agent learning functionality
-
-    Args:
-        experiences: Set of tuples with the structure (state, action, reward, next_state, done)
-        epsilon: Probability of selecting a random action
-        q_network: Q network used for Sarsa
-        target_q_network: Target Q network used for Sarsa
-        optimizer: Optimizer to use for training
-        action_dim: How many actions can the system choose from
-
-    Returns:
-        Nothing
+    """
+    Implement agent learning functionality
     """
 
     # Convert NumPy arrays to PyTorch tensors
@@ -102,6 +98,7 @@ def agent_learn(experiences, epsilon, q_network, target_q_network, optimizer, ac
     rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1)
     next_states = torch.tensor(next_states, dtype=torch.float32)
     dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1)
+
     experiences = (states, actions, rewards, next_states, dones)
 
     loss = compute_loss(experiences, epsilon, q_network, target_q_network, action_dim, discount_factor)  # Compute loss
@@ -110,40 +107,30 @@ def agent_learn(experiences, epsilon, q_network, target_q_network, optimizer, ac
     optimizer.step()  # Update weights
 
 
-def train_sarsa(
-        environment,
-        epsilon,
-        discount_factor,
-        num_episodes,
-        batch_size,
-        buffer_limit,
-        max_num_timesteps,
-        state_dim,
-        action_dim,
-        load_saved=False,
-        layers=[64, 128, 1024, 128, 64]
-):
-    """Main training loop
+def save_model(network, filename):
+    """
+    Save the weights of a network
+    """
 
-    Args:
-        environment: Simulation environment which is used to get the reward and simulate actions
-        epsilon: Measure for how often model will take a random action instead of the optimal one
-        discount_factor: Factor to decrease the value of rewards with increasing timesteps
-        num_episodes: How many times to run the simulation
-        batch_size: Size of mini batches
-        buffer_limit: Size of replay buffer
-        max_num_timesteps: Max amount of steps to take in simulation before ending
-        state_dim: How many state variables are used
-        action_dim: How many actions can the system choose from
-        load_saved: Reload last training model at start of training process
-        layers: Array of hidden layers and their sizes (e.g. [64, 128, 128, 64])
+    torch.save(network.state_dict(), filename)
 
-    Returns:
-        Nothing
+
+def load_model(network, filename):
+    """
+    Load the weights into a network
+    """
+
+    network.load_state_dict(torch.load(filename))
+
+
+def train_sarsa(environment, epsilon, discount_factor, num_episodes, batch_size, buffer_limit,
+                max_num_timesteps, state_dim, action_dim, load_saved=False, layers=[64, 128, 1024, 128, 64]):
+    """
+    Main training loop for the Sarsa agent
     """
 
     environment.tracking_baseline = False
-    q_network, target_q_network = initialize(state_dim, action_dim, layers)
+    q_network, target_q_network = initialize_networks(state_dim, action_dim, layers)
 
     if load_saved:
         # Load saved weights if requested
@@ -176,7 +163,7 @@ def train_sarsa(
 
             # Execute the action and store the result in the replay buffer
             next_state, reward, done = environment.step(action)
-            buffer.append(experience(state, action, reward, next_state, done))
+            buffer.append(Experience(state, action, reward, next_state, done))
 
             if len(buffer) >= buffer_limit:  # If replay buffer is full enough
                 mini_batch = random.sample(buffer, batch_size)  # Sample a mini-batch
@@ -189,6 +176,8 @@ def train_sarsa(
 
         # Decay the epsilon value after each episode
         epsilon *= discount_factor
+        # Don't let epsilon get too small
+        epsilon = max(epsilon, 0.1)
 
         if i % 10 == 0:
             # Update the target Q-network every 10 episodes
@@ -202,11 +191,3 @@ def train_sarsa(
             save_model(target_q_network, 'saved_networks/target_q_network.pth')
 
     environment.reset()
-
-def save_model(network, filename):
-    # Save the weights of a network
-    torch.save(network.state_dict(), filename)
-
-def load_model(network, filename):
-    # Load the weights into a network
-    network.load_state_dict(torch.load(filename))

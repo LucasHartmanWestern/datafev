@@ -1,85 +1,76 @@
-# TODO - Create an algorithm which interacts with the same simulation environment and picks
-#  where to go at any given time interval based on the following:
-#  - Minimize the total time spent charging
-#  - Minimize the total time spent driving
-#  The intent is to use this as a comparison to the RL model's choices
-#  This is based on Tesla's "Trip Planner"
+import heapq
 import math
 
-from geolocation.maps_free import get_distance_and_time
 
-times = []
-visited_chargers = []
-
-def baseline(environment, max_attempts):
+def baseline(environment):
     environment.tracking_baseline = True
     environment.reset()
 
-    attempts = 0
-
     make, model, battery_percentage, distance_to_dest, *charger_distances = environment.state
+
+    distances = energy_efficient_path(environment, battery_percentage)
+    print(distances)
+
+
+def energy_efficient_path(environment, starting_battery_percentage):
     usage_per_hour, charge_per_hour = environment.ev_info()
 
-    populate_options(environment)
-    done = False
+    graph = create_graph(environment.charger_coords, ('origin', environment.org_lat, environment.org_long), ('destination', environment.dest_lat, environment.dest_long))
 
-    # Keep travelling to chargers or destination if you can get to it
-    while done is not True and attempts < max_attempts:
-        attempts += 1
-        max_distance = environment.cur_soc / (usage_per_hour / 3600)
+    start = 'origin'
 
-        done = check_done(environment, max_distance)
+    # Assume total battery charge can cover a distance equal to the full_charge_distance
+    full_charge_distance = (environment.max_soc / (usage_per_hour)) * 60  # (kW / (kW/hr)) * km/h = km
+    starting_distance = full_charge_distance * (starting_battery_percentage)
 
-        if done is not True:
-            current_best = find_best_charger(environment, max_distance)
-            # How much to charge
-            target_soc = (usage_per_hour / 3600) * current_best[2]
+    print(f'Full Charge {full_charge_distance}\nStarting dist {starting_distance}\nBattery Percentage {starting_battery_percentage}')
 
-            # Go to the charger
-            while environment.is_charging is not True and done is not True:
-                next_state, reward, done = environment.step(current_best[0])  # Execute action
+    distances = {node: float('infinity') for node in graph}
+    distances[start] = starting_distance
 
-            # Charge until there's enough to travel to destination
-            while environment.cur_soc < target_soc and done is not True:
-                next_state, reward, done = environment.step(current_best[0])  # Execute action
+    pq = [(starting_distance, start)]
 
-            # Repopulate the options
-            populate_options(environment)
+    while pq:
+        curr_distance, curr_node = heapq.heappop(pq)
 
-def find_best_charger(environment, max_distance):
-    # Pick the best charger to go to
-    current_best = (0, math.inf, math.inf)
+        if curr_distance > distances[curr_node]:
+            continue
 
-    for i in range(len(environment.charger_coords) - 1):
-        total_time = times[i + 1][1] + times[i + 1][2]
-        if (i + 1) not in visited_chargers and total_time < current_best[1] + current_best[2] and max_distance > times[i + 1][1]:
-            current_best = (i + 1, times[i + 1][1], times[i + 1][2])
+        for neighbor, weight in graph[curr_node].items():
+            # weight here stands for the distance between curr_node and neighbor
+            # it also represents the amount of energy to travel this distance
+            distance_left = curr_distance - weight
 
-    visited_chargers.append(current_best[0])
+            # If the remaining energy (distance_left) after reaching the neighbor is greater than
+            # the current stored energy (distance) at the neighbor, update it
+            if distance_left > distances[neighbor]:
+                distances[neighbor] = distance_left
+                heapq.heappush(pq, (distance_left, neighbor))
 
-    return current_best
+    return distances
 
-def populate_options(environment):
-    make, model, battery_percentage, distance_to_dest, *charger_distances = environment.state
+def haversine(coord1, coord2):
+    R = 6371 # Radius of the Earth in kilometers
+    lat1, lon1 = math.radians(coord1[0]), math.radians(coord1[1])
+    lat2, lon2 = math.radians(coord2[0]), math.radians(coord2[1])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+    c = 2*math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
 
-    times.clear()
-
-    # Time for option 0
-    times.append((0, get_distance_and_time((environment.cur_lat, environment.cur_long), (environment.dest_lat, environment.dest_long))[1], 0))
-
-    for i in range(len(environment.charger_coords)):
-        times.append((i + 1,
-                      get_distance_and_time((environment.cur_lat, environment.cur_long),
-                                            (environment.charger_coords[i][1], environment.charger_coords[i][2]))[1],
-                      get_distance_and_time((environment.charger_coords[i][1], environment.charger_coords[i][2]),
-                                            (environment.dest_lat, environment.dest_long))[1]))
-
-def check_done(environment, max_distance):
-    # Check if simulation can reach destination
-    if times[0][1] < max_distance:
-        done = False
-        while done is not True:
-            next_state, reward, done = environment.step(0)  # Execute action
-        return True
-    else:
-        return False
+def create_graph(array, origin, destination):
+    graph = {}
+    nodes = [origin] + array + [destination]
+    for i in range(len(nodes)):
+        for j in range(i+1, len(nodes)):
+            id1, lat1, lon1 = nodes[i]
+            id2, lat2, lon2 = nodes[j]
+            distance = haversine((lat1, lon1), (lat2, lon2))
+            if id1 not in graph:
+                graph[id1] = {}
+            if id2 not in graph:
+                graph[id2] = {}
+            graph[id1][id2] = distance
+            graph[id2][id1] = distance  # Assuming distance is the same in both directions
+    return graph

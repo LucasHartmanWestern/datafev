@@ -83,7 +83,7 @@ def move_towards(origin, destination, travel_time):
     average_speed = 60  # km/h
 
     # Calculate the travel distance based on the travel time and average speed
-    travel_distance = (travel_time / 3600) * average_speed  # distance = speed * time
+    travel_distance = (travel_time / 60) * average_speed  # distance = speed * time
 
     # Calculate total distance between origin and destination
     total_distance = geodesic(origin, destination).km

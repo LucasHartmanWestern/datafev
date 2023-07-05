@@ -6,43 +6,50 @@ from baseline_algorithm import baseline
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
-############
+############ Algorithm ############
 
-algorithm = "SARSA"
+algorithm = "DQN"
+
+############ Configuration ############
 
 train_model = True
-generate_baseline = True
+generate_baseline = False
 start_from_previous_session = True
 save_data = True
 generate_plots = True
 
-############
+############ Environment Settings ############
 
-num_of_chargers = 10
-make = 0
-model = 0
-starting_charge = 50000 # 50kW
+num_of_chargers = 10 # 3x this amount of chargers will be used (for origin, destination, and midpoint)
+make = 0 # Not currently used
+model = 0 # Not currently used
+starting_charge = 10000 # 50kW
 max_charge = 100000 # 100kW
-org_lat = 42.98904084
-org_long = -81.22821493
-dest_lat = 43.006137960450104
-dest_long = -81.27651959525788
-num_episodes = 1000
+# 400 Lyle St, London
+org_lat = 42.98881506714761
+org_long = -81.22807778867828
+# 7720 Patrick St, Port Franks
+dest_lat = 43.23157243219816
+dest_long = -81.88029292946138
 
-max_attempts = 10
+############ Hyperparameters ############
+
+num_episodes = 10000
+epsilon = 0.50
+discount_factor = 0.99999
+batch_size = 128
+max_num_timesteps = 120 # 2 hours
+buffer_limit = (num_episodes * max_num_timesteps) / 2
+layers = [32, 64, 128, 64, 32]
+
+############ Initialization ############
 
 env = EVSimEnvironment(num_episodes, num_of_chargers, make, model, starting_charge, max_charge, org_lat, org_long, dest_lat, dest_long)
 
 if generate_baseline:
-    baseline(env, max_attempts)
+    baseline(env)
 
 if train_model:
-    epsilon = 0.60
-    discount_factor = 0.9999
-    batch_size = 50
-    buffer_limit = 125
-    max_num_timesteps = 50
-    layers = [32, 32, 32]
 
     state_dimension, action_dimension = env.get_state_action_dimension()
 
@@ -68,6 +75,6 @@ if generate_plots:
         route_datasets.append(group)
 
     if train_model or start_from_previous_session:
-        generate_average_reward_plot(reward_data, algorithm)
+        generate_average_reward_plot(algorithm, reward_data)
 
     generate_interactive_plot(algorithm, route_datasets, charger_data, (org_lat, org_long), (dest_lat, dest_long))
