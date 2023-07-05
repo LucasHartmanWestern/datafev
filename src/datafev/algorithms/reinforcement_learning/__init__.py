@@ -20,7 +20,7 @@ generate_plots = True
 
 ############ Environment Settings ############
 
-num_of_chargers = 10 # 3x this amount of chargers will be used (for origin, destination, and midpoint)
+num_of_chargers = 5 # 3x this amount of chargers will be used (for origin, destination, and midpoint)
 make = 0 # Not currently used
 model = 0 # Not currently used
 starting_charge = 10000 # 50kW

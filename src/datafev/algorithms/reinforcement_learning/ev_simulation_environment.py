@@ -2,11 +2,15 @@ import copy
 import csv
 import math
 import json
+import random
+
 import pandas as pd
 
 from collections import OrderedDict
 from geolocation.maps_free import get_closest_chargers, move_towards, get_distance_and_time
 from geolocation.visualize import read_excel_data
+
+from charging_station import ChargingStation
 
 # TODO - Create simulation environment which is capable of:
 #  - Introducing randomness (traffic will randomly fluctuate at charging stations based on time-of-day)
@@ -53,6 +57,8 @@ class EVSimEnvironment:
         self.current_path = []
         self.best_path = []
         self.used_chargers = []
+
+        self.charger_list = [] # List of ChargingStation objects
 
         self.step_num = 0
         self.episode_reward = 0
@@ -145,12 +151,21 @@ class EVSimEnvironment:
 
         return current_state, reward, done
 
+    # Return ChargingStation object by id
+    def find_charging_station_by_id(self, target_id):
+        for station in self.charger_list:
+            if station.id == target_id:
+                return station
+        return None
+
     # Simulates battery life of EV as it travels
     def update_charge(self, action):
 
+        charger_id = self.charger_coords[action - 1][0]
+        station = self.find_charging_station_by_id(charger_id)
+
         # Find how far station is away from current coordinates in minutes
-        time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (
-            self.charger_coords[action - 1][1], self.charger_coords[action - 1][2]))[1] / 60
+        time_to_station = get_distance_and_time((self.cur_lat, self.cur_long), (station.coord[0], station.coord[1]))[1] / 60
 
         # Consume battery while driving
         if self.is_charging is not True:
@@ -158,7 +173,7 @@ class EVSimEnvironment:
 
         # Increase battery while charging
         else:
-            self.cur_soc += self.charge_per_hour / (60)
+            self.cur_soc += station.charge()
             # Cap SoC at max
             if self.cur_soc > self.max_soc:
                 self.cur_soc = self.max_soc
@@ -168,10 +183,12 @@ class EVSimEnvironment:
             self.is_charging = True
         else:
             self.is_charging = False
+            station.leave()
 
     # Simulates traffic updates at chargers
     def update_traffic(self):
-        pass
+        for charger in self.charger_list:
+            charger.update_traffic()
 
     # Simulates geographical movement of EV
     def move(self, action):
@@ -226,7 +243,7 @@ class EVSimEnvironment:
         else:
             new_row.append(self.episode_num + episode_offset)
         if action == -1:
-            new_row.append(' ')
+            new_row.append('No Action')
         elif action == 0:
             new_row.append(action)
         else:
@@ -241,6 +258,8 @@ class EVSimEnvironment:
         else:
             new_row.append(self.dest_lat)
             new_row.append(self.dest_long)
+
+        new_row.append(self.state)
 
         if self.tracking_baseline is not True:
             self.current_path.append(new_row)
@@ -261,6 +280,12 @@ class EVSimEnvironment:
 
         # Combine lists
         self.charger_coords = org_chargers + dest_chargers + midway_chargers
+
+        # Create list of ChargingStation objects
+        for charger in self.charger_coords:
+            self.charger_list.append(ChargingStation(charger['id'], (charger['latitude'], charger['longitude'])))
+
+        self.update_traffic()
 
         # Legacy code - not really useful anymore
         for charger in self.charger_coords:
@@ -314,7 +339,7 @@ class EVSimEnvironment:
 
         # Decrease reward proportionately to distance remaining distance and battery percentage
         reward -= (distance_to_dest / distance_from_origin) * 100
-        reward -= (1 / battery_percentage) * 50
+        reward -= (1 / battery_percentage) * 10
 
         # Big negative bonus for running out of battery before reaching destination
         if battery_percentage <= 0 and done:
@@ -326,21 +351,22 @@ class EVSimEnvironment:
     def ev_info(self):
         # TODO - Make estimates more realistic using LH Dataset
         usage_per_hour = 15600 # Average usage per hour of Tesla
-        charge_per_hour = 12500 # Average charge per hour of Tesla
-        return usage_per_hour, charge_per_hour
+        return usage_per_hour
 
     def update_state(self):
 
         # Recalculate distances to each charger
-        charger_distances = []
+        charger_info = []
         for charger in self.charger_coords:
-            charger_distances.append(get_distance_and_time((self.cur_lat, self.cur_long), (charger[1], charger[2]))[0])
+            station = self.find_charging_station_by_id(charger[0])
+            distance = get_distance_and_time((self.cur_lat, self.cur_long), (station.coords[0], station.coords[1]))[0]
+            charger_info.append((distance, station.traffic, station.peak_traffic, self.charger_per_hour / 1000))
 
         # Recalculate remaining distance to destination
         distance_to_dest = get_distance_and_time((self.cur_lat, self.cur_long), (self.dest_lat, self.dest_long))[0]
 
         # Update state
-        self.state = (self.make, self.model, (self.cur_soc / self.max_soc), distance_to_dest, *charger_distances)
+        self.state = (self.make, self.model, (self.cur_soc / self.max_soc), distance_to_dest, *charger_info)
 
     # Used for creating NNs
     def get_state_action_dimension(self):
@@ -361,6 +387,7 @@ class EVSimEnvironment:
             header_row.append('Episode Reward')
             header_row.append('Latitude')
             header_row.append('Longitude')
+            header_row.append('State')
 
             writer.writerow(header_row)
 
